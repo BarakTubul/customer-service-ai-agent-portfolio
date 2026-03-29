@@ -10,7 +10,9 @@ from app.core.errors import UnauthorizedError
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
+from app.repositories.order_repository import OrderRepository
 from app.repositories.user_repository import UserRepository
+from app.services.account_order_service import AccountOrderService
 from app.services.auth_service import AuthService
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -22,6 +24,16 @@ def get_user_repository(db: Session = Depends(get_db)) -> UserRepository:
 
 def get_auth_service(user_repository: UserRepository = Depends(get_user_repository)) -> AuthService:
     return AuthService(user_repository)
+
+
+def get_order_repository(db: Session = Depends(get_db)) -> OrderRepository:
+    return OrderRepository(db)
+
+
+def get_account_order_service(
+    order_repository: OrderRepository = Depends(get_order_repository),
+) -> AccountOrderService:
+    return AccountOrderService(order_repository)
 
 
 def _extract_token_from_request(
