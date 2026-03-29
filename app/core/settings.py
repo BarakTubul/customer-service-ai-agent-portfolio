@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+import os
+from enum import Enum
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Environment(str, Enum):
+    DEV = "dev"
+    STAGING = "staging"
+    PROD = "prod"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    app_name: str = "Customer Service API"
+    app_env: Environment = Environment.DEV
+    api_prefix: str = "/api/v1"
+
+    database_url: str = "postgresql+psycopg://app:app@localhost:5432/customer_service"
+
+    jwt_secret_key: str = "change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60
+
+    auth_cookie_name: str = "access_token"
+    cors_origins_raw: str = "http://localhost:3000"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
+
+    @property
+    def is_dev(self) -> bool:
+        return self.app_env == Environment.DEV
+
+    @property
+    def is_staging(self) -> bool:
+        return self.app_env == Environment.STAGING
+
+    @property
+    def is_prod(self) -> bool:
+        return self.app_env == Environment.PROD
+
+    @property
+    def debug(self) -> bool:
+        return self.is_dev
+
+    @property
+    def log_level(self) -> str:
+        if self.is_prod:
+            return "INFO"
+        if self.is_staging:
+            return "DEBUG"
+        return "DEBUG"
+
+    @property
+    def auth_cookie_secure(self) -> bool:
+        return self.is_staging or self.is_prod
+
+    @property
+    def auth_cookie_samesite(self) -> str:
+        if self.is_prod:
+            return "strict"
+        return "lax"
+
+    @property
+    def expose_error_details(self) -> bool:
+        return self.is_dev
+
+
+def _select_env_files() -> tuple[str, str]:
+    raw_env = os.getenv("APP_ENV", Environment.DEV.value).strip().lower()
+    if raw_env not in {Environment.DEV.value, Environment.STAGING.value, Environment.PROD.value}:
+        raw_env = Environment.DEV.value
+    return ".env", f".env.{raw_env}"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    env_files = _select_env_files()
+    return Settings(_env_file=env_files)

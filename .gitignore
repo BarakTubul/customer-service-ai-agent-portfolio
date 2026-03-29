@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.db
+
+# IDE
+.vscode/

@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.db.base import Base
+from app.models.user import User
+from app.repositories.user_repository import UserRepository
+from app.services.auth_service import AuthService
+
+
+TEST_DATABASE_URL = "sqlite+pysqlite:///:memory:"
+
+
+def build_session() -> Session:
+    engine = create_engine(TEST_DATABASE_URL)
+    Base.metadata.create_all(bind=engine)
+    local_session = sessionmaker(bind=engine, autocommit=False, autoflush=False, class_=Session)
+    return local_session()
+
+
+def test_create_guest_sets_is_guest_true() -> None:
+    session = build_session()
+    try:
+        service = AuthService(UserRepository(session))
+        response = service.create_guest()
+
+        user = session.get(User, response.guest_id)
+        assert user is not None
+        assert user.is_guest is True
+    finally:
+        session.close()
+
+
+def test_convert_guest_to_registered_flips_is_guest() -> None:
+    session = build_session()
+    try:
+        service = AuthService(UserRepository(session))
+        guest = service.create_guest()
+        guest_user = session.get(User, guest.guest_id)
+        assert guest_user is not None
+
+        converted = service.convert_guest_to_registered(
+            guest_user=guest_user,
+            email="guest@example.com",
+            password="strong-password",
+        )
+
+        user = session.get(User, converted.user_id)
+        assert user is not None
+        assert user.is_guest is False
+        assert user.email == "guest@example.com"
+    finally:
+        session.close()
