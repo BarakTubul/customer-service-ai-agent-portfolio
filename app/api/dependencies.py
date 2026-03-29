@@ -10,10 +10,13 @@ from app.core.errors import UnauthorizedError
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
+from app.repositories.conversation_repository import ConversationRepository
+from app.repositories.faq_repository import FAQRepository
 from app.repositories.order_repository import OrderRepository
 from app.repositories.user_repository import UserRepository
 from app.services.account_order_service import AccountOrderService
 from app.services.auth_service import AuthService
+from app.services.intent_faq_service import IntentFAQService
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -34,6 +37,24 @@ def get_account_order_service(
     order_repository: OrderRepository = Depends(get_order_repository),
 ) -> AccountOrderService:
     return AccountOrderService(order_repository)
+
+
+def get_faq_repository() -> FAQRepository:
+    return FAQRepository()
+
+
+def get_conversation_repository(db: Session = Depends(get_db)) -> ConversationRepository:
+    return ConversationRepository(db)
+
+
+def get_intent_faq_service(
+    faq_repository: FAQRepository = Depends(get_faq_repository),
+    conversation_repository: ConversationRepository = Depends(get_conversation_repository),
+) -> IntentFAQService:
+    return IntentFAQService(
+        faq_repository=faq_repository,
+        conversation_repository=conversation_repository,
+    )
 
 
 def _extract_token_from_request(
