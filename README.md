@@ -41,4 +41,8 @@ This keeps domain logic stable while allowing safe runtime policy changes per en
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/guest/convert`
+- `GET /api/v1/auth/session`
+- `GET /api/v1/account/me`
+- `GET /api/v1/orders/{order_id}`
+- `GET /api/v1/orders/{order_id}/timeline-sim`
 - `GET /health`
