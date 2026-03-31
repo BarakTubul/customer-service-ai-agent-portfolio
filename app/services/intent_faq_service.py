@@ -12,6 +12,7 @@ from app.schemas.intent_faq import (
     ContextMessage,
     EscalationCheckResponse,
     FAQAnswer,
+    FAQCitation,
     FAQSearchResponse,
     IntentResolveResponse,
 )
@@ -64,8 +65,9 @@ class IntentFAQService:
         )
 
     def search_faq(self, *, user: User, session_id: str, query_text: str, intent: str) -> FAQSearchResponse:
-        result = self.faq_repository.find_best_match(intent=intent, query_text=query_text)
-        if result is None:
+        retrieved = self.faq_repository.retrieve_chunks(intent=intent, query_text=query_text, top_k=3)
+
+        if not retrieved:
             answer = FAQAnswer(
                 text="I could not find a reliable answer right now. Please try rephrasing or ask for human support.",
                 confidence=0.2,
@@ -73,22 +75,36 @@ class IntentFAQService:
                 source_id="fallback",
                 policy_version="n/a",
             )
+            citations: list[FAQCitation] = []
         else:
-            entry, confidence = result
-            response_text = entry.answer
+            top_chunk, confidence = retrieved[0]
+            base_answer = " ".join(chunk.text for chunk, _ in retrieved)
+            response_text = base_answer
             if self.llm_faq_synthesis_enabled:
                 response_text = self.llm_provider.synthesize_faq_answer(
                     question=query_text,
-                    base_answer=entry.answer,
-                    source_label=entry.source_label,
+                    base_answer=base_answer,
+                    source_label=top_chunk.source_label,
                 )
+
             answer = FAQAnswer(
                 text=response_text,
                 confidence=confidence,
-                source_label=entry.source_label,
-                source_id=entry.source_id,
-                policy_version=entry.policy_version,
+                source_label=top_chunk.source_label,
+                source_id=top_chunk.source_id,
+                policy_version=top_chunk.policy_version,
             )
+            citations = [
+                FAQCitation(
+                    chunk_id=chunk.chunk_id,
+                    source_id=chunk.source_id,
+                    source_label=chunk.source_label,
+                    policy_version=chunk.policy_version,
+                    snippet=chunk.text,
+                    score=score,
+                )
+                for chunk, score in retrieved
+            ]
 
         self.conversation_repository.add_message(
             session_id=session_id,
@@ -96,7 +112,7 @@ class IntentFAQService:
             role="assistant",
             text=answer.text,
         )
-        return FAQSearchResponse(answer=answer)
+        return FAQSearchResponse(answer=answer, citations=citations, retrieval_mode="rag_seeded")
 
     def get_conversation_context(self, *, session_id: str, include_last_n: int = 6) -> ConversationContextResponse:
         messages = self.conversation_repository.list_recent_messages(session_id=session_id, limit=include_last_n)

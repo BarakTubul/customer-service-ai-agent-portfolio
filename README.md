@@ -8,6 +8,7 @@
 - JWT authentication utilities
 - LangGraph hybrid intent flow (rule-first, LLM fallback)
 - LLM provider abstraction with `mock` and OpenAI implementations
+- Seeded RAG FAQ retrieval with chunk citations in API responses
 - Guest mode endpoint: `POST /api/v1/auth/guest`
 - Guest-to-registered conversion endpoint: `POST /api/v1/auth/guest/convert`
 - Custom `AppError` hierarchy and global exception handlers
@@ -61,3 +62,9 @@ This keeps domain logic stable while allowing safe runtime policy changes per en
 - `GET /api/v1/conversations/{session_id}/context`
 - `POST /api/v1/fallback/escalation-check`
 - `GET /health`
+
+## RAG Demonstration
+- FAQ search uses seeded chunk retrieval (RAG-style) before generation.
+- Responses include `citations` (chunk id, source, snippet, score).
+- In `mock` mode, synthesis is deterministic.
+- In `openai` mode, synthesis rewrites grounded context while preserving source attribution.

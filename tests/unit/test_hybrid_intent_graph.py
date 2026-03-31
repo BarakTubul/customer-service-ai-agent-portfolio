@@ -36,3 +36,24 @@ def test_low_confidence_path_uses_llm() -> None:
     assert result["used_llm"] is True
     assert result["intent"] == "general_support"
     assert provider.calls == 1
+
+
+def test_refund_rule_path_skips_llm() -> None:
+    provider = FakeLLMProvider()
+    graph = HybridIntentGraph(llm_provider=provider, rule_confidence_threshold=0.75)
+
+    result = graph.run(message_text="I want a refund for my order")
+
+    assert result["intent"] == "refund_policy"
+    assert result["used_llm"] is False
+    assert provider.calls == 0
+
+
+def test_high_threshold_forces_llm_even_for_rule_match() -> None:
+    provider = FakeLLMProvider()
+    graph = HybridIntentGraph(llm_provider=provider, rule_confidence_threshold=0.95)
+
+    result = graph.run(message_text="Where is my order now?")
+
+    assert result["used_llm"] is True
+    assert provider.calls == 1

@@ -55,7 +55,11 @@ def test_faq_search_and_context_roundtrip(client: TestClient) -> None:
         headers=headers,
     )
     assert faq.status_code == 200
-    assert faq.json()["answer"]["source_id"] == "verification-v1"
+    payload = faq.json()
+    assert payload["answer"]["source_id"] == "verification-v1"
+    assert payload["retrieval_mode"] == "rag_seeded"
+    assert len(payload["citations"]) >= 1
+    assert payload["citations"][0]["source_id"] == "verification-v1"
 
     context = client.get("/api/v1/conversations/sess-ctx/context", headers=headers)
     assert context.status_code == 200
@@ -77,3 +81,55 @@ def test_escalation_check_low_confidence(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["should_escalate"] is True
+
+
+def test_faq_search_requires_authentication(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/faq/search",
+        json={
+            "session_id": "sess-no-auth",
+            "query_text": "refund time",
+            "intent": "refund_policy",
+            "locale": "en-US",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_intent_resolve_short_message_returns_clarify_route(client: TestClient) -> None:
+    headers = _auth_headers(client)
+    response = client.post(
+        "/api/v1/intent/resolve",
+        json={
+            "session_id": "sess-short",
+            "message_id": "msg-short",
+            "message_text": "hi",
+            "locale": "en-US",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["route"] == "clarify"
+    assert payload["requires_clarification"] is True
+
+
+def test_escalation_check_high_risk_reason_code(client: TestClient) -> None:
+    headers = _auth_headers(client)
+    response = client.post(
+        "/api/v1/fallback/escalation-check",
+        json={
+            "session_id": "sess-high-risk",
+            "intent": "billing_dispute",
+            "confidence": 0.95,
+            "reason": "charge issue",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["should_escalate"] is True
+    assert payload["escalation_reason_code"] == "high_risk_intent"

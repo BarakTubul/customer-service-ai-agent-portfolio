@@ -27,6 +27,11 @@ class FakeLLMProvider:
         return f"LLM: {base_answer}"
 
 
+class LowConfidenceLLMProvider(FakeLLMProvider):
+    def classify_intent(self, *, message_text: str) -> IntentClassification:
+        return IntentClassification(intent="general_support", confidence=0.2, reason="low_confidence")
+
+
 def build_session() -> Session:
     engine = create_engine(TEST_DATABASE_URL)
     Base.metadata.create_all(bind=engine)
@@ -61,5 +66,70 @@ def test_faq_synthesis_uses_llm_provider() -> None:
 
         assert response.answer.text.startswith("LLM:")
         assert provider.synthesis_calls == 1
+    finally:
+        session.close()
+
+
+def test_faq_without_llm_synthesis_keeps_grounded_text() -> None:
+    session = build_session()
+    try:
+        provider = FakeLLMProvider()
+        service = IntentFAQService(
+            faq_repository=FAQRepository(),
+            conversation_repository=ConversationRepository(session),
+            llm_provider=provider,
+            intent_graph=HybridIntentGraph(llm_provider=provider),
+            escalation_confidence_threshold=0.6,
+            llm_faq_synthesis_enabled=False,
+        )
+
+        user = User(is_guest=True, is_active=True, is_verified=False)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        response = service.search_faq(
+            user=user,
+            session_id="sess-grounded",
+            query_text="refund processing time",
+            intent="refund_policy",
+        )
+
+        assert response.answer.text.startswith("LLM:") is False
+        assert response.retrieval_mode == "rag_seeded"
+        assert len(response.citations) >= 1
+        assert provider.synthesis_calls == 0
+    finally:
+        session.close()
+
+
+def test_low_confidence_intent_requires_clarification() -> None:
+    session = build_session()
+    try:
+        provider = LowConfidenceLLMProvider()
+        service = IntentFAQService(
+            faq_repository=FAQRepository(),
+            conversation_repository=ConversationRepository(session),
+            llm_provider=provider,
+            intent_graph=HybridIntentGraph(llm_provider=provider, rule_confidence_threshold=0.95),
+            escalation_confidence_threshold=0.6,
+            llm_faq_synthesis_enabled=True,
+        )
+
+        user = User(is_guest=True, is_active=True, is_verified=False)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        response = service.resolve_intent(
+            user=user,
+            session_id="sess-clarify",
+            message_text="hi",
+            message_id="msg-clarify",
+        )
+
+        assert response.requires_clarification is True
+        assert response.route == "clarify"
+        assert response.clarification_question is not None
     finally:
         session.close()
