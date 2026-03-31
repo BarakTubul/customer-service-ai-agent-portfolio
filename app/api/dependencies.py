@@ -18,10 +18,12 @@ from app.models.user import User
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.faq_repository import FAQRepository
 from app.repositories.order_repository import OrderRepository
+from app.repositories.refund_repository import RefundRepository
 from app.repositories.user_repository import UserRepository
 from app.services.account_order_service import AccountOrderService
 from app.services.auth_service import AuthService
 from app.services.intent_faq_service import IntentFAQService
+from app.services.refund_service import RefundService
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -42,6 +44,17 @@ def get_account_order_service(
     order_repository: OrderRepository = Depends(get_order_repository),
 ) -> AccountOrderService:
     return AccountOrderService(order_repository)
+
+
+def get_refund_repository(db: Session = Depends(get_db)) -> RefundRepository:
+    return RefundRepository(db)
+
+
+def get_refund_service(
+    order_repository: OrderRepository = Depends(get_order_repository),
+    refund_repository: RefundRepository = Depends(get_refund_repository),
+) -> RefundService:
+    return RefundService(order_repository=order_repository, refund_repository=refund_repository)
 
 
 def get_faq_repository() -> FAQRepository:

@@ -61,6 +61,10 @@ This keeps domain logic stable while allowing safe runtime policy changes per en
 - `POST /api/v1/faq/search`
 - `GET /api/v1/conversations/{session_id}/context`
 - `POST /api/v1/fallback/escalation-check`
+- `POST /api/v1/refunds/eligibility/check`
+- `POST /api/v1/refunds/requests`
+- `GET /api/v1/refunds/requests/{refund_request_id}`
+- `GET /api/v1/orders/{order_id}/state-sim`
 - `GET /health`
 
 ## RAG Demonstration
