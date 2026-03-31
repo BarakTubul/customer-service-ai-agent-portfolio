@@ -36,8 +36,19 @@ class FAQAnswer(BaseModel):
     policy_version: str
 
 
+class FAQCitation(BaseModel):
+    chunk_id: str
+    source_id: str
+    source_label: str
+    policy_version: str
+    snippet: str
+    score: float
+
+
 class FAQSearchResponse(BaseModel):
     answer: FAQAnswer
+    citations: list[FAQCitation] = []
+    retrieval_mode: str = "rag_seeded"
 
 
 class ContextMessage(BaseModel):

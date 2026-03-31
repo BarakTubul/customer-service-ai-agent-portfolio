@@ -6,6 +6,9 @@
 - SQLAlchemy + PostgreSQL wiring
 - Alembic migrations with initial `users` table
 - JWT authentication utilities
+- LangGraph hybrid intent flow (rule-first, LLM fallback)
+- LLM provider abstraction with `mock` and OpenAI implementations
+- Seeded RAG FAQ retrieval with chunk citations in API responses
 - Guest mode endpoint: `POST /api/v1/auth/guest`
 - Guest-to-registered conversion endpoint: `POST /api/v1/auth/guest/convert`
 - Custom `AppError` hierarchy and global exception handlers
@@ -36,6 +39,15 @@ Environment-specific behavior is centralized in `app/core/settings.py`:
 
 This keeps domain logic stable while allowing safe runtime policy changes per environment.
 
+## LLM and Agent Mode
+- `LLM_PROVIDER=mock` keeps behavior deterministic and offline-safe.
+- `LLM_PROVIDER=openai` enables OpenAI-backed classification/synthesis.
+- `OPENAI_API_KEY` and `OPENAI_MODEL` control runtime model access.
+- LangGraph orchestrates intent flow:
+   - rule classification node
+   - confidence gate
+   - LLM classification node fallback
+
 ## API Endpoints (Current Skeleton)
 - `POST /api/v1/auth/guest`
 - `POST /api/v1/auth/register`
@@ -50,3 +62,9 @@ This keeps domain logic stable while allowing safe runtime policy changes per en
 - `GET /api/v1/conversations/{session_id}/context`
 - `POST /api/v1/fallback/escalation-check`
 - `GET /health`
+
+## RAG Demonstration
+- FAQ search uses seeded chunk retrieval (RAG-style) before generation.
+- Responses include `citations` (chunk id, source, snippet, score).
+- In `mock` mode, synthesis is deterministic.
+- In `openai` mode, synthesis rewrites grounded context while preserving source attribution.

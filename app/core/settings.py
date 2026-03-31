@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     auth_cookie_name: str = "access_token"
     cors_origins_raw: str = "http://localhost:3000"
 
+    llm_provider: str = "mock"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
+    llm_temperature: float = 0.0
+    intent_rule_confidence_threshold: float = 0.75
+    intent_escalation_confidence_threshold: float = 0.6
+    llm_faq_synthesis_enabled: bool = True
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
