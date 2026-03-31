@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 
+from app.ai.langgraph_intent import HybridIntentGraph
+from app.ai.providers.base import LLMProvider
 from app.models.user import User
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.faq_repository import FAQRepository
@@ -20,32 +22,29 @@ class IntentFAQService:
         self,
         faq_repository: FAQRepository,
         conversation_repository: ConversationRepository,
+        llm_provider: LLMProvider,
+        intent_graph: HybridIntentGraph,
+        escalation_confidence_threshold: float,
+        llm_faq_synthesis_enabled: bool,
     ) -> None:
         self.faq_repository = faq_repository
         self.conversation_repository = conversation_repository
+        self.llm_provider = llm_provider
+        self.intent_graph = intent_graph
+        self.escalation_confidence_threshold = escalation_confidence_threshold
+        self.llm_faq_synthesis_enabled = llm_faq_synthesis_enabled
 
     def resolve_intent(self, *, user: User, session_id: str, message_text: str, message_id: str) -> IntentResolveResponse:
-        normalized = message_text.lower()
-        intent = "general_support"
-        confidence = 0.58
-        requires_clarification = False
+        state = self.intent_graph.run(message_text=message_text)
+        intent = state["intent"]
+        confidence = state["confidence"]
+
+        requires_clarification = confidence < self.escalation_confidence_threshold
         clarification_question = None
         route = "faq_answer"
-
-        if any(token in normalized for token in ["refund", "money back", "reimburse"]):
-            intent = "refund_policy"
-            confidence = 0.9
-        elif any(token in normalized for token in ["where is my order", "order", "delivery"]):
-            intent = "order_status"
-            confidence = 0.86
-        elif any(token in normalized for token in ["verify", "verification", "verified"]):
-            intent = "account_verification"
-            confidence = 0.84
-        elif len(normalized.split()) < 3:
-            requires_clarification = True
+        if requires_clarification:
             clarification_question = "Are you asking about refunds, orders, or account verification?"
             route = "clarify"
-            confidence = 0.4
 
         trace_id = hashlib.sha256(f"{session_id}:{message_id}:{intent}".encode("utf-8")).hexdigest()[:16]
         self.conversation_repository.add_message(
@@ -76,8 +75,15 @@ class IntentFAQService:
             )
         else:
             entry, confidence = result
+            response_text = entry.answer
+            if self.llm_faq_synthesis_enabled:
+                response_text = self.llm_provider.synthesize_faq_answer(
+                    question=query_text,
+                    base_answer=entry.answer,
+                    source_label=entry.source_label,
+                )
             answer = FAQAnswer(
-                text=entry.answer,
+                text=response_text,
                 confidence=confidence,
                 source_label=entry.source_label,
                 source_id=entry.source_id,
@@ -105,7 +111,7 @@ class IntentFAQService:
         high_risk_intents = {"billing_dispute", "account_lockout", "legal_threat", "safety_concern"}
         if intent in high_risk_intents:
             return EscalationCheckResponse(should_escalate=True, escalation_reason_code="high_risk_intent")
-        if confidence < 0.6:
+        if confidence < self.escalation_confidence_threshold:
             return EscalationCheckResponse(should_escalate=True, escalation_reason_code="low_confidence")
         if "human" in reason.lower() or "agent" in reason.lower():
             return EscalationCheckResponse(should_escalate=True, escalation_reason_code="user_requested_human")

@@ -6,6 +6,8 @@
 - SQLAlchemy + PostgreSQL wiring
 - Alembic migrations with initial `users` table
 - JWT authentication utilities
+- LangGraph hybrid intent flow (rule-first, LLM fallback)
+- LLM provider abstraction with `mock` and OpenAI implementations
 - Guest mode endpoint: `POST /api/v1/auth/guest`
 - Guest-to-registered conversion endpoint: `POST /api/v1/auth/guest/convert`
 - Custom `AppError` hierarchy and global exception handlers
@@ -35,6 +37,15 @@ Environment-specific behavior is centralized in `app/core/settings.py`:
   - Logging level
 
 This keeps domain logic stable while allowing safe runtime policy changes per environment.
+
+## LLM and Agent Mode
+- `LLM_PROVIDER=mock` keeps behavior deterministic and offline-safe.
+- `LLM_PROVIDER=openai` enables OpenAI-backed classification/synthesis.
+- `OPENAI_API_KEY` and `OPENAI_MODEL` control runtime model access.
+- LangGraph orchestrates intent flow:
+   - rule classification node
+   - confidence gate
+   - LLM classification node fallback
 
 ## API Endpoints (Current Skeleton)
 - `POST /api/v1/auth/guest`

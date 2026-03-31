@@ -6,6 +6,11 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.ai.langgraph_intent import HybridIntentGraph
+from app.ai.providers.base import LLMProvider
+from app.ai.providers.mock_provider import MockLLMProvider
+from app.ai.providers.openai_provider import OpenAILLMProvider
+from app.core.settings import get_settings
 from app.core.errors import UnauthorizedError
 from app.core.security import decode_access_token
 from app.db.session import get_db
@@ -47,13 +52,39 @@ def get_conversation_repository(db: Session = Depends(get_db)) -> ConversationRe
     return ConversationRepository(db)
 
 
+def get_llm_provider() -> LLMProvider:
+    settings = get_settings()
+    if settings.llm_provider == "openai" and settings.openai_api_key:
+        return OpenAILLMProvider(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            temperature=settings.llm_temperature,
+        )
+    return MockLLMProvider()
+
+
+def get_hybrid_intent_graph(llm_provider: LLMProvider = Depends(get_llm_provider)) -> HybridIntentGraph:
+    settings = get_settings()
+    return HybridIntentGraph(
+        llm_provider=llm_provider,
+        rule_confidence_threshold=settings.intent_rule_confidence_threshold,
+    )
+
+
 def get_intent_faq_service(
     faq_repository: FAQRepository = Depends(get_faq_repository),
     conversation_repository: ConversationRepository = Depends(get_conversation_repository),
+    llm_provider: LLMProvider = Depends(get_llm_provider),
+    intent_graph: HybridIntentGraph = Depends(get_hybrid_intent_graph),
 ) -> IntentFAQService:
+    settings = get_settings()
     return IntentFAQService(
         faq_repository=faq_repository,
         conversation_repository=conversation_repository,
+        llm_provider=llm_provider,
+        intent_graph=intent_graph,
+        escalation_confidence_threshold=settings.intent_escalation_confidence_threshold,
+        llm_faq_synthesis_enabled=settings.llm_faq_synthesis_enabled,
     )
 
 
