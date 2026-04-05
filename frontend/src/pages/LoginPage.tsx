@@ -18,7 +18,7 @@ export function LoginPage() {
 
     try {
       await login(email, password);
-      navigate('/dashboard');
+      navigate('/order');
     } catch (err) {
       console.error('[auth] login failed', {
         email,

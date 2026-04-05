@@ -228,6 +228,78 @@ class APIClient {
     const response = await this.client.get<t.OrderStateSim>(`/orders/${orderId}/state-sim`);
     return response.data;
   }
+
+  // Order placement endpoints
+  async getCatalogItems(params: t.CatalogQueryParams): Promise<t.CatalogListResponse> {
+    const response = await this.client.get<t.CatalogListResponse>('/catalog/items', {
+      params: {
+        page: params.page,
+        page_size: params.page_size,
+        search: params.search || undefined,
+        restaurant: params.restaurant || undefined,
+        cuisine: params.cuisine || undefined,
+        availability: params.availability || 'all',
+        sort_by: params.sort_by || 'featured',
+      },
+    });
+    return response.data;
+  }
+
+  async getCart(): Promise<t.CartResponse> {
+    const response = await this.client.get<t.CartResponse>('/cart');
+    return response.data;
+  }
+
+  async addCartItem(itemId: string, quantity = 1): Promise<t.CartResponse> {
+    const response = await this.client.post<t.CartResponse>('/cart/items', {
+      item_id: itemId,
+      quantity,
+    });
+    return response.data;
+  }
+
+  async updateCartItem(itemId: string, quantity: number): Promise<t.CartResponse> {
+    const response = await this.client.patch<t.CartResponse>(`/cart/items/${itemId}`, {
+      quantity,
+    });
+    return response.data;
+  }
+
+  async removeCartItem(itemId: string): Promise<t.CartResponse> {
+    const response = await this.client.delete<t.CartResponse>(`/cart/items/${itemId}`);
+    return response.data;
+  }
+
+  async validateCheckout(payload: t.CheckoutValidateRequest): Promise<t.CheckoutValidateResponse> {
+    const response = await this.client.post<t.CheckoutValidateResponse>('/checkout/validate', payload);
+    return response.data;
+  }
+
+  async authorizePaymentSim(
+    payload: t.PaymentAuthorizeSimRequest
+  ): Promise<t.PaymentAuthorizeSimResponse> {
+    const response = await this.client.post<t.PaymentAuthorizeSimResponse>(
+      '/payments/authorize-sim',
+      payload
+    );
+    return response.data;
+  }
+
+  async createOrder(
+    payload: t.OrderCreateRequest,
+    idempotencyKey?: string
+  ): Promise<t.OrderCreateResponse> {
+    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const response = await this.client.post<t.OrderCreateResponse>('/orders', payload, { headers });
+    return response.data;
+  }
+
+  async getOrderLifecycleSim(orderId: string, scenarioId = 'default') {
+    const response = await this.client.get(`/orders/${orderId}/lifecycle-sim`, {
+      params: { scenario_id: scenarioId },
+    });
+    return response.data;
+  }
 }
 
 export const apiClient = new APIClient();

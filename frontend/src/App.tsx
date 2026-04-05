@@ -8,6 +8,7 @@ import { RegisterPage } from '@/pages/RegisterPage';
 import { GuestAccessPage } from '@/pages/GuestPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ChatPage } from '@/pages/ChatPage';
+import { OrderPlacementPage } from '@/pages/OrderPlacementPage';
 import { RefundPage } from '@/pages/RefundPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -39,6 +40,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/order"
+          element={
+            <ProtectedRoute>
+              <OrderPlacementPage />
             </ProtectedRoute>
           }
         />

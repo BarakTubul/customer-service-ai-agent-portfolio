@@ -27,3 +27,7 @@ class OrderRepository:
         self.db.commit()
         self.db.refresh(order)
         return order
+
+    def list_by_user(self, user_id: int) -> list[Order]:
+        stmt = select(Order).where(Order.user_id == user_id).order_by(Order.created_at.desc())
+        return list(self.db.scalars(stmt))

@@ -38,6 +38,24 @@ class AccountOrderService:
             account_status=status,
         )
 
+    def list_orders(self, user: User) -> list[OrderResponse]:
+        if user.is_guest:
+            return []
+
+        orders = self.order_repository.list_by_user(user.id)
+        return [
+            OrderResponse(
+                order_id=order.order_id,
+                status=order.status,
+                status_label=order.status_label,
+                created_at=order.created_at,
+                updated_at=order.updated_at,
+                eta_from=order.eta_from,
+                eta_to=order.eta_to,
+            )
+            for order in orders
+        ]
+
     def get_order(self, *, user: User, order_id: str) -> OrderResponse:
         if user.is_guest:
             raise ForbiddenError("Guest users cannot access orders")
@@ -52,6 +70,7 @@ class AccountOrderService:
             order_id=order.order_id,
             status=order.status,
             status_label=order.status_label,
+            created_at=order.created_at,
             updated_at=order.updated_at,
             eta_from=order.eta_from,
             eta_to=order.eta_to,

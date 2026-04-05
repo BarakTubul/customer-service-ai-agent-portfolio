@@ -31,6 +31,14 @@ def get_account_me(
     return account_order_service.get_account_me(current_user)
 
 
+@router.get("/orders", response_model=list[OrderResponse])
+def list_orders(
+    current_user: User = Depends(get_current_user),
+    account_order_service: AccountOrderService = Depends(get_account_order_service),
+) -> list[OrderResponse]:
+    return account_order_service.list_orders(current_user)
+
+
 @router.get("/orders/{order_id}", response_model=OrderResponse)
 def get_order(
     order_id: str,

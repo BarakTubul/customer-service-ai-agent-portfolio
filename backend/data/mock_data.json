@@ -1,0 +1,142 @@
+{
+  "restaurants": [
+    {
+      "id": 1,
+      "name": "Pizza Roma",
+      "cuisine": "Italian",
+      "rating": 4.5,
+      "delivery_time": "30-40",
+      "delivery_fee": 12,
+      "is_open": true
+    },
+    {
+      "id": 2,
+      "name": "Burger House",
+      "cuisine": "American",
+      "rating": 4.2,
+      "delivery_time": "20-30",
+      "delivery_fee": 10,
+      "is_open": true
+    },
+    {
+      "id": 3,
+      "name": "Sushi Tokyo",
+      "cuisine": "Japanese",
+      "rating": 4.8,
+      "delivery_time": "40-50",
+      "delivery_fee": 15,
+      "is_open": false
+    },
+    {
+      "id": 4,
+      "name": "Green Bowl",
+      "cuisine": "Healthy",
+      "rating": 4.6,
+      "delivery_time": "25-35",
+      "delivery_fee": 8,
+      "is_open": true
+    }
+  ],
+  "menu_items": [
+    {
+      "id": 101,
+      "restaurant_id": 1,
+      "name": "Margherita Pizza",
+      "description": "Classic pizza with tomato sauce, mozzarella and basil",
+      "price": 13.5,
+      "category": "Pizza",
+      "image": "/images/catalog/item-101.jpg",
+      "is_available": true
+    },
+    {
+      "id": 102,
+      "restaurant_id": 1,
+      "name": "Pepperoni Pizza",
+      "description": "Tomato sauce, mozzarella and spicy pepperoni",
+      "price": 16.5,
+      "category": "Pizza",
+      "image": "/images/catalog/item-102.jpg",
+      "is_available": true
+    },
+    {
+      "id": 103,
+      "restaurant_id": 1,
+      "name": "Garlic Bread",
+      "description": "Freshly baked bread with garlic butter",
+      "price": 6,
+      "category": "Sides",
+      "image": "/images/catalog/item-103.jpg",
+      "is_available": true
+    },
+    {
+      "id": 201,
+      "restaurant_id": 2,
+      "name": "Classic Cheeseburger",
+      "description": "Beef patty, cheddar cheese, lettuce, tomato",
+      "price": 15,
+      "category": "Burgers",
+      "image": "/images/catalog/item-201.jpg",
+      "is_available": true
+    },
+    {
+      "id": 202,
+      "restaurant_id": 2,
+      "name": "Double Burger",
+      "description": "Double beef patty with cheese and special sauce",
+      "price": 19.5,
+      "category": "Burgers",
+      "image": "/images/catalog/item-202.jpg",
+      "is_available": true
+    },
+    {
+      "id": 203,
+      "restaurant_id": 2,
+      "name": "French Fries",
+      "description": "Crispy golden fries",
+      "price": 5.4,
+      "category": "Sides",
+      "image": "/images/catalog/item-203.jpg",
+      "is_available": false
+    },
+    {
+      "id": 301,
+      "restaurant_id": 3,
+      "name": "Salmon Sushi Roll",
+      "description": "Fresh salmon with rice and seaweed",
+      "price": 18,
+      "category": "Sushi",
+      "image": "/images/catalog/item-301.jpg",
+      "is_available": true
+    },
+    {
+      "id": 302,
+      "restaurant_id": 3,
+      "name": "Tuna Nigiri",
+      "description": "Slices of tuna over rice",
+      "price": 16.5,
+      "category": "Sushi",
+      "image": "/images/catalog/item-302.jpg",
+      "is_available": true
+    },
+    {
+      "id": 401,
+      "restaurant_id": 4,
+      "name": "Avocado Salad",
+      "description": "Fresh greens with avocado and vinaigrette",
+      "price": 12.6,
+      "category": "Salads",
+      "image": "/images/catalog/item-401.jpg",
+      "is_available": true
+    },
+    {
+      "id": 402,
+      "restaurant_id": 4,
+      "name": "Protein Bowl",
+      "description": "Quinoa, chicken, veggies and tahini",
+      "price": 14.4,
+      "category": "Bowls",
+      "image": "/images/catalog/item-402.jpg",
+      "is_available": true
+    }
+  ]
+}

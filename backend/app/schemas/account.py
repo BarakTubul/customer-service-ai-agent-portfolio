@@ -28,6 +28,7 @@ class OrderResponse(BaseModel):
     order_id: str
     status: str
     status_label: str
+    created_at: datetime
     updated_at: datetime
     eta_from: datetime | None
     eta_to: datetime | None

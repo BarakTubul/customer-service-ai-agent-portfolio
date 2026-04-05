@@ -12,3 +12,70 @@ body {
 #root {
   min-height: 100vh;
 }
+
+@keyframes ambientFloat {
+  0% {
+    transform: translateY(0px) translateX(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-14px) translateX(10px) scale(1.04);
+  }
+  100% {
+    transform: translateY(0px) translateX(0px) scale(1);
+  }
+}
+
+@keyframes revealUp {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.order-hero-bg {
+  background: linear-gradient(120deg, #fff6e5, #ecfeff, #fdf2f8, #eef2ff);
+  background-size: 220% 220%;
+  animation: gradientShift 14s ease infinite;
+}
+
+.order-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(24px);
+  opacity: 0.35;
+  animation: ambientFloat 9s ease-in-out infinite;
+}
+
+.order-blob-delay {
+  animation-delay: 1.8s;
+}
+
+.order-reveal {
+  animation: revealUp 420ms ease both;
+}
+
+.catalog-card {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.catalog-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 30px rgba(14, 116, 144, 0.16);
+  border-color: rgba(14, 116, 144, 0.35);
+}

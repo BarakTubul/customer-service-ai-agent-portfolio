@@ -107,6 +107,112 @@ export interface OrderStateSim {
   }>;
 }
 
+export interface CatalogItem {
+  item_id: string;
+  restaurant_id: number;
+  restaurant_name: string;
+  restaurant_cuisine?: string | null;
+  restaurant_rating?: number | null;
+  restaurant_delivery_time?: string | null;
+  restaurant_delivery_fee_cents?: number | null;
+  name: string;
+  description: string;
+  image_url?: string | null;
+  price_cents: number;
+  currency: string;
+  in_stock: boolean;
+}
+
+export interface CatalogListResponse {
+  items: CatalogItem[];
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+  restaurants: string[];
+  cuisines: string[];
+}
+
+export interface CatalogQueryParams {
+  page: number;
+  page_size: number;
+  search?: string;
+  restaurant?: string;
+  cuisine?: string;
+  availability?: 'all' | 'available' | 'out_of_stock';
+  sort_by?: 'featured' | 'name' | 'price_asc' | 'price_desc' | 'restaurant';
+}
+
+export interface CartLine {
+  item_id: string;
+  name: string;
+  quantity: number;
+  unit_price_cents: number;
+  line_total_cents: number;
+  currency: string;
+}
+
+export interface CartResponse {
+  user_id: number;
+  items: CartLine[];
+  subtotal_cents: number;
+  currency: string;
+}
+
+export interface ShippingAddress {
+  line1: string;
+  city: string;
+  postal_code: string;
+  country_code: string;
+}
+
+export interface CheckoutValidateRequest {
+  shipping_address: ShippingAddress;
+  delivery_option: 'standard' | 'express';
+  payment_method_reference: string;
+}
+
+export interface CheckoutValidateResponse {
+  valid: boolean;
+  issues: string[];
+  subtotal_cents: number;
+  delivery_fee_cents: number;
+  total_cents: number;
+  currency: string;
+}
+
+export interface PaymentAuthorizeSimRequest {
+  payment_method_reference: string;
+  amount_cents: number;
+  currency?: string;
+}
+
+export interface PaymentAuthorizeSimResponse {
+  authorized: boolean;
+  authorization_id?: string;
+  reason?: string;
+}
+
+export interface OrderCreateRequest {
+  shipping_address: ShippingAddress;
+  delivery_option: 'standard' | 'express';
+  payment_method_reference: string;
+  simulation_scenario?: string;
+}
+
+export interface OrderCreateResponse {
+  order_id: string;
+  status: string;
+  status_label: string;
+  total_cents: number;
+  currency: string;
+  payment_authorization_id: string;
+  idempotent_replay: boolean;
+  created_at: string;
+}
+
 // Request types
 export interface GuestAccessRequest {
   email: string;

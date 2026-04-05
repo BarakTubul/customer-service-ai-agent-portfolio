@@ -9,6 +9,7 @@
 - LangGraph hybrid intent flow (rule-first, LLM fallback)
 - LLM provider abstraction with `mock` and OpenAI implementations
 - Seeded RAG FAQ retrieval with chunk citations in API responses
+- Mock restaurant/menu dataset loaded from configurable JSON in `backend/data/mock_data.json`
 - Guest mode endpoint: `POST /api/v1/auth/guest`
 - Guest-to-registered conversion endpoint: `POST /api/v1/auth/guest/convert`
 - Custom `AppError` hierarchy and global exception handlers
@@ -65,6 +66,16 @@ This keeps domain logic stable while allowing safe runtime policy changes per en
 - `POST /api/v1/refunds/requests`
 - `GET /api/v1/refunds/requests/{refund_request_id}`
 - `GET /api/v1/orders/{order_id}/state-sim`
+- `GET /api/v1/catalog/items`
+- `GET /api/v1/cart`
+- `POST /api/v1/cart/items`
+- `PATCH /api/v1/cart/items/{item_id}`
+- `DELETE /api/v1/cart/items/{item_id}`
+- `POST /api/v1/checkout/validate`
+- `POST /api/v1/payments/authorize-sim`
+- `POST /api/v1/orders`
+- `GET /api/v1/orders/{order_id}/lifecycle-sim`
+- `POST /api/v1/dev/mock-data/reload` (dev only)
 - `GET /health`
 
 ## RAG Demonstration
@@ -100,7 +111,11 @@ A modern React + TypeScript frontend is included in the `frontend/` folder.
 - **Responsive UI**: Tailwind CSS with dark mode support
 
 ### Making API Calls
-The frontend proxies requests to `http://localhost:8000` via Vite dev server. JWT tokens are automatically attached to all requests from `localStorage`.
+The frontend proxies requests to `http://localhost:8000` via Vite dev server. Authentication now uses cookie-based sessions, so requests include credentials instead of reading JWTs from `localStorage`.
+
+### Mock Data
+- The order-placement catalog is sourced from `backend/data/mock_data.json`.
+- Set `MOCK_DATA_PATH` in the backend environment to point to a different JSON dataset without changing code.
 
 ### Build for Production
 ```bash

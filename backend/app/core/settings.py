@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     intent_rule_confidence_threshold: float = 0.75
     intent_escalation_confidence_threshold: float = 0.6
     llm_faq_synthesis_enabled: bool = True
+    mock_data_path: str = "backend/data/mock_data.json"
 
     @property
     def cors_origins(self) -> list[str]:
