@@ -18,5 +18,8 @@ venv/
 # Local databases
 *.db
 
+# Packaging artifacts
+*.egg-info/
+
 # IDE
 .vscode/

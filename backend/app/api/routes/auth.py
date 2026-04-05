@@ -61,6 +61,18 @@ def login(
     return token
 
 
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(response: Response) -> Response:
+    settings = get_settings()
+    response.delete_cookie(
+        key=settings.auth_cookie_name,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite=settings.auth_cookie_samesite,
+    )
+    return response
+
+
 @router.post("/guest/convert", response_model=TokenResponse)
 def convert_guest(
     payload: GuestConvertRequest,
