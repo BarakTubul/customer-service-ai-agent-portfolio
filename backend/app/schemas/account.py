@@ -28,6 +28,8 @@ class OrderResponse(BaseModel):
     order_id: str
     status: str
     status_label: str
+    ordered_items_summary: str | None = None
+    total_cents: int = 0
     created_at: datetime
     updated_at: datetime
     eta_from: datetime | None

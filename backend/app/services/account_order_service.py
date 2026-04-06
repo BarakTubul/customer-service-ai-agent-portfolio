@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.core.errors import ForbiddenError, NotFoundError
 from app.models.user import User
@@ -44,15 +44,7 @@ class AccountOrderService:
 
         orders = self.order_repository.list_by_user(user.id)
         return [
-            OrderResponse(
-                order_id=order.order_id,
-                status=order.status,
-                status_label=order.status_label,
-                created_at=order.created_at,
-                updated_at=order.updated_at,
-                eta_from=order.eta_from,
-                eta_to=order.eta_to,
-            )
+            self._build_order_response(order)
             for order in orders
         ]
 
@@ -66,15 +58,36 @@ class AccountOrderService:
         if order.user_id != user.id:
             raise ForbiddenError("Order does not belong to current user")
 
+        return self._build_order_response(order)
+
+    def _build_order_response(self, order) -> OrderResponse:
+        eta_from, eta_to = self._resolve_eta_window(order)
         return OrderResponse(
             order_id=order.order_id,
             status=order.status,
             status_label=order.status_label,
+            ordered_items_summary=order.ordered_items_summary,
+            total_cents=order.total_cents or 0,
             created_at=order.created_at,
             updated_at=order.updated_at,
-            eta_from=order.eta_from,
-            eta_to=order.eta_to,
+            eta_from=eta_from,
+            eta_to=eta_to,
         )
+
+    @staticmethod
+    def _resolve_eta_window(order) -> tuple[datetime | None, datetime | None]:
+        if order.eta_from and order.eta_to:
+            return order.eta_from, order.eta_to
+
+        now = datetime.now(UTC)
+        eta_from = order.created_at.astimezone(UTC) + timedelta(minutes=35)
+        eta_to = order.created_at.astimezone(UTC) + timedelta(minutes=50)
+
+        if now > eta_to:
+            eta_from = now + timedelta(minutes=10)
+            eta_to = now + timedelta(minutes=20)
+
+        return eta_from, eta_to
 
     def get_order_timeline_sim(
         self,
@@ -86,15 +99,27 @@ class AccountOrderService:
         order = self.get_order(user=user, order_id=order_id)
         seed = hashlib.sha256(f"{order_id}:{scenario_id}".encode("utf-8")).hexdigest()
         offset = int(seed[:2], 16) % 5
+        base_time = order.created_at.astimezone(UTC)
+        now = datetime.now(UTC)
+        simulated_now = max(now, base_time + timedelta(minutes=30 + offset))
 
-        base_time = order.updated_at.astimezone(UTC)
-        events = [
-            OrderTimelineEvent(event="accepted", timestamp=base_time - timedelta(minutes=20 + offset), source="sim"),
-            OrderTimelineEvent(event="preparing", timestamp=base_time - timedelta(minutes=12 + offset), source="sim"),
-            OrderTimelineEvent(event="pickup", timestamp=base_time - timedelta(minutes=6 + offset), source="sim"),
-            OrderTimelineEvent(event="in_transit", timestamp=base_time - timedelta(minutes=2 + offset), source="sim"),
-            OrderTimelineEvent(event="status_snapshot", timestamp=base_time, source="sim"),
+        stage_definitions = [
+            ("accepted", 2 + offset),
+            ("preparing", 8 + offset),
+            ("pickup", 18 + offset),
+            ("in_transit", 30 + offset),
+            ("arriving", 40 + offset),
+            ("delivered", 45 + offset),
         ]
+
+        events = [
+            OrderTimelineEvent(event=event_name, timestamp=base_time + timedelta(minutes=minutes_after), source="sim")
+            for event_name, minutes_after in stage_definitions
+            if base_time + timedelta(minutes=minutes_after) <= simulated_now
+        ]
+
+        if not events:
+            events = [OrderTimelineEvent(event="accepted", timestamp=base_time + timedelta(minutes=2 + offset), source="sim")]
         return OrderTimelineResponse(order_id=order.order_id, scenario_id=scenario_id, events=events)
 
     @staticmethod

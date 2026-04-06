@@ -21,8 +21,21 @@ class OrderRepository:
         user_id: int,
         status: str = "confirmed",
         status_label: str = "Confirmed",
+        ordered_items_summary: str | None = None,
+        total_cents: int | None = None,
+        eta_from=None,
+        eta_to=None,
     ) -> Order:
-        order = Order(order_id=order_id, user_id=user_id, status=status, status_label=status_label)
+        order = Order(
+            order_id=order_id,
+            user_id=user_id,
+            status=status,
+            status_label=status_label,
+            ordered_items_summary=ordered_items_summary,
+            total_cents=total_cents,
+            eta_from=eta_from,
+            eta_to=eta_to,
+        )
         self.db.add(order)
         self.db.commit()
         self.db.refresh(order)

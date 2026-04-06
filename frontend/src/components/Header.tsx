@@ -9,6 +9,7 @@ export function Header() {
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
+    { label: 'My Orders', path: '/orders' },
     { label: 'Chat', path: '/chat' },
     { label: 'Order', path: '/order' },
     { label: 'Refunds', path: '/refund' },

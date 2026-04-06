@@ -28,6 +28,11 @@ function buildCatalogCacheKey(params: t.CatalogQueryParams): string {
   ].join('|');
 }
 
+function generateDemoPaymentReference(shouldDecline = false): string {
+  const seed = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return shouldDecline ? `sim_demo_${seed}_decline` : `sim_demo_${seed}`;
+}
+
 export function OrderPlacementPage() {
   const navigate = useNavigate();
   const { isGuest } = useAuth();
@@ -52,8 +57,6 @@ export function OrderPlacementPage() {
   const [shippingAddress, setShippingAddress] = useState<t.ShippingAddress>({
     line1: '',
     city: '',
-    postal_code: '',
-    country_code: 'US',
   });
   const [paymentReference, setPaymentReference] = useState('sim_card_ok_001');
   const [scenario, setScenario] = useState('default');
@@ -505,18 +508,6 @@ export function OrderPlacementPage() {
                     onChange={(e) => setShippingAddress((prev) => ({ ...prev, city: e.target.value }))}
                     placeholder="Beer Sheva"
                   />
-                  <Input
-                    label="Postal code"
-                    value={shippingAddress.postal_code}
-                    onChange={(e) => setShippingAddress((prev) => ({ ...prev, postal_code: e.target.value }))}
-                    placeholder="8410501"
-                  />
-                  <Input
-                    label="Country code"
-                    value={shippingAddress.country_code}
-                    onChange={(e) => setShippingAddress((prev) => ({ ...prev, country_code: e.target.value.toUpperCase() }))}
-                    placeholder="IL"
-                  />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 mt-4">
@@ -537,6 +528,33 @@ export function OrderPlacementPage() {
                     onChange={(e) => setPaymentReference(e.target.value)}
                     placeholder="sim_card_ok_001"
                   />
+                  <div className="rounded-md border border-cyan-100 bg-cyan-50/70 p-3">
+                    <p className="text-sm font-semibold text-cyan-900">Demo card token</p>
+                    <p className="text-xs text-cyan-800 mt-1">
+                      Generate a simulation token and use it as payment reference.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPaymentReference(generateDemoPaymentReference(false))}
+                      >
+                        Generate success token
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPaymentReference(generateDemoPaymentReference(true))}
+                      >
+                        Generate decline token
+                      </Button>
+                    </div>
+                    <p className="text-xs text-cyan-800 mt-2">
+                      Tip: tokens ending with <span className="font-semibold">_decline</span> simulate payment failure.
+                    </p>
+                  </div>
                   <Input
                     label="Scenario"
                     value={scenario}

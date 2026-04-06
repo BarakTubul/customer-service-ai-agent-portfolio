@@ -61,8 +61,6 @@ class CartResponse(BaseModel):
 class ShippingAddressRequest(BaseModel):
     line1: str = Field(min_length=3, max_length=120)
     city: str = Field(min_length=2, max_length=80)
-    postal_code: str = Field(min_length=3, max_length=20)
-    country_code: str = Field(min_length=2, max_length=2)
 
 
 class CheckoutValidateRequest(BaseModel):

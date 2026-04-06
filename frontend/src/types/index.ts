@@ -24,11 +24,19 @@ export interface AuthTokenResponse {
   is_guest: boolean;
 }
 
+export interface AccountMeResponse {
+  user_id: number;
+  email_masked: string | null;
+  account_status: string;
+}
+
 export interface Order {
   order_id: string;
   user_id: string;
   status: string;
   status_label: string;
+  ordered_items_summary?: string | null;
+  total_cents?: number | null;
   created_at: string;
   eta_from?: string;
   eta_to?: string;
@@ -164,8 +172,6 @@ export interface CartResponse {
 export interface ShippingAddress {
   line1: string;
   city: string;
-  postal_code: string;
-  country_code: string;
 }
 
 export interface CheckoutValidateRequest {

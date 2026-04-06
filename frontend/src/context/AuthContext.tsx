@@ -36,7 +36,7 @@ async function hydrateCurrentUser(): Promise<t.User | null> {
     const account = await apiClient.getAccountMe();
     return {
       user_id: String(session.user_id),
-      email: account.masked_email,
+      email: account.email_masked || `user-${session.user_id}`,
       is_guest: false,
       is_verified: true,
       is_active: session.is_active,

@@ -7,6 +7,9 @@ import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { GuestAccessPage } from '@/pages/GuestPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { OrdersPage } from '@/pages/OrdersPage';
+import { OrderDetailPage } from '@/pages/OrderDetailPage';
+import { OrderTimelinePage } from '@/pages/OrderTimelinePage';
 import { ChatPage } from '@/pages/ChatPage';
 import { OrderPlacementPage } from '@/pages/OrderPlacementPage';
 import { RefundPage } from '@/pages/RefundPage';
@@ -32,6 +35,30 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute>
+              <OrdersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/:orderId"
+          element={
+            <ProtectedRoute>
+              <OrderDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/:orderId/timeline"
+          element={
+            <ProtectedRoute>
+              <OrderTimelinePage />
             </ProtectedRoute>
           }
         />

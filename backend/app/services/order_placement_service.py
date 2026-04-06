@@ -133,9 +133,6 @@ class OrderPlacementService:
         if payload.delivery_option not in {"standard", "express"}:
             issues.append("delivery_option must be one of: standard, express")
 
-        if not re.fullmatch(r"[A-Za-z0-9\- ]{3,20}", payload.shipping_address.postal_code):
-            issues.append("postal_code format is invalid")
-
         payment_guard_issue = self._validate_payment_reference(payload.payment_method_reference)
         if payment_guard_issue:
             issues.append(payment_guard_issue)
@@ -202,8 +199,19 @@ class OrderPlacementService:
         if not payment.authorized:
             raise ValidationAppError(payment.reason or "Payment authorization failed")
 
+        created_at = datetime.now(UTC)
+        eta_from, eta_to = self._build_eta_window(created_at, payload.delivery_option)
         order_id = f"ord_{uuid.uuid4().hex[:10]}"
-        order = self.order_repository.create(order_id=order_id, user_id=user.id)
+        cart_snapshot = self._build_cart_response(user.id)
+        ordered_items_summary = self._format_order_summary(cart_snapshot.items)
+        order = self.order_repository.create(
+            order_id=order_id,
+            user_id=user.id,
+            ordered_items_summary=ordered_items_summary,
+            total_cents=checkout.total_cents,
+            eta_from=eta_from,
+            eta_to=eta_to,
+        )
         _CARTS[user.id] = {}
 
         response = OrderCreateResponse(
@@ -319,3 +327,21 @@ class OrderPlacementService:
             )
 
         return catalog
+
+    @staticmethod
+    def _build_eta_window(created_at: datetime, delivery_option: str) -> tuple[datetime, datetime]:
+        if delivery_option == "express":
+            return created_at + timedelta(minutes=20), created_at + timedelta(minutes=30)
+        return created_at + timedelta(minutes=35), created_at + timedelta(minutes=50)
+
+    @staticmethod
+    def _format_order_summary(lines: list[CartLineResponse]) -> str:
+        if not lines:
+            return "No items"
+
+        parts: list[str] = []
+        for line in lines:
+            quantity = int(getattr(line, "quantity", 1))
+            name = str(getattr(line, "name", "Item"))
+            parts.append(f"{quantity}x {name}" if quantity > 1 else name)
+        return ", ".join(parts)

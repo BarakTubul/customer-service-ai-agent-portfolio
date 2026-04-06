@@ -141,10 +141,8 @@ class APIClient {
     return response.data;
   }
 
-  async getAccountMe(): Promise<{ user: t.User; masked_email: string }> {
-    const response = await this.client.get<{ user: t.User; masked_email: string }>(
-      '/account/me'
-    );
+  async getAccountMe(): Promise<t.AccountMeResponse> {
+    const response = await this.client.get<t.AccountMeResponse>('/account/me');
     return response.data;
   }
 
@@ -160,8 +158,27 @@ class APIClient {
   }
 
   async getOrderTimeline(orderId: string): Promise<t.OrderTimeline> {
-    const response = await this.client.get<t.OrderTimeline>(`/orders/${orderId}/timeline-sim`);
-    return response.data;
+    const response = await this.client.get<{
+      order_id: string;
+      scenario_id: string;
+      events: Array<{ event: string; timestamp: string; source: string }>;
+    }>(`/orders/${orderId}/timeline-sim`);
+
+    const filteredEvents = response.data.events.filter((event) => event.event !== 'status_snapshot');
+
+    const timeline = filteredEvents.map((event) => ({
+      date: new Date(event.timestamp).toLocaleString(),
+      event: event.event,
+    }));
+
+    return {
+      order_id: response.data.order_id,
+      current_status:
+        filteredEvents.length > 0
+          ? filteredEvents[filteredEvents.length - 1].event
+          : 'unknown',
+      timeline,
+    };
   }
 
   // Intent & FAQ endpoints

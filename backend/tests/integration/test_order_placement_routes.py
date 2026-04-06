@@ -58,8 +58,6 @@ def test_catalog_and_cart_for_guest_session(client: TestClient) -> None:
             "shipping_address": {
                 "line1": "42 Example Street",
                 "city": "Beer Sheva",
-                "postal_code": "8410501",
-                "country_code": "IL",
             },
             "delivery_option": "standard",
             "payment_method_reference": "sim_card_ok_001",
@@ -85,8 +83,6 @@ def test_guest_cannot_submit_order(client: TestClient) -> None:
             "shipping_address": {
                 "line1": "42 Example Street",
                 "city": "Beer Sheva",
-                "postal_code": "8410501",
-                "country_code": "IL",
             },
             "delivery_option": "standard",
             "payment_method_reference": "sim_card_ok_001",
@@ -110,8 +106,6 @@ def test_registered_user_create_order_with_idempotency(client: TestClient) -> No
         "shipping_address": {
             "line1": "42 Example Street",
             "city": "Beer Sheva",
-            "postal_code": "8410501",
-            "country_code": "IL",
         },
         "delivery_option": "express",
         "payment_method_reference": "sim_card_ok_002",

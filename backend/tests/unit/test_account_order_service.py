@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -54,5 +56,26 @@ def test_user_cannot_access_foreign_order() -> None:
             assert False, "Expected ForbiddenError"
         except ForbiddenError:
             assert True
+    finally:
+        session.close()
+
+
+def test_timeline_progresses_to_delivered_for_old_orders() -> None:
+    session = build_session()
+    try:
+        user_repo = UserRepository(session)
+        user = user_repo.create_registered(email="timeline@example.com", password_hash="hash")
+
+        order_repo = OrderRepository(session)
+        order = order_repo.create(order_id="ord-old", user_id=user.id)
+        order.created_at = datetime.now(UTC) - timedelta(hours=2)
+        order.updated_at = order.created_at
+        session.commit()
+
+        service = AccountOrderService(order_repo)
+        timeline = service.get_order_timeline_sim(user=user, order_id="ord-old", scenario_id="default")
+
+        assert timeline.events[-1].event == "delivered"
+        assert all(event.event != "status_snapshot" for event in timeline.events)
     finally:
         session.close()
