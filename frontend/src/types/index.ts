@@ -87,22 +87,22 @@ export interface FAQCitation {
 export interface IntentResolveResponse {
   intent: string;
   confidence: number;
-  route: 'faq_answer' | 'order_status' | 'refund' | 'account' | 'clarify' | 'escalate';
+  route: 'faq_answer' | 'clarify';
   requires_clarification: boolean;
-  answer?: {
-    text: string;
-    retrieval_mode: 'deterministic' | 'rule_based' | 'llm_synthesis';
-  };
-  citations?: FAQCitation[];
-  escalation_reason_code?: string;
-  session_id: string;
+  clarification_question?: string | null;
+  trace_id: string;
 }
 
 export interface FAQSearchResponse {
-  query: string;
-  best_match?: FAQCitation;
-  all_citations: FAQCitation[];
-  session_id: string;
+  answer: {
+    text: string;
+    confidence: number;
+    source_label: string;
+    source_id: string;
+    policy_version: string;
+  };
+  citations: FAQCitation[];
+  retrieval_mode: string;
 }
 
 export interface RefundEligibilityResponse {

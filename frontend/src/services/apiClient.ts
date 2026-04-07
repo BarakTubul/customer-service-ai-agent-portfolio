@@ -227,18 +227,26 @@ class APIClient {
   }
 
   // Intent & FAQ endpoints
-  async resolveIntent(message: string, sessionId: string): Promise<t.IntentResolveResponse> {
+  async resolveIntent(
+    messageText: string,
+    sessionId: string,
+    messageId: string
+  ): Promise<t.IntentResolveResponse> {
     const response = await this.client.post<t.IntentResolveResponse>('/intent/resolve', {
-      message,
       session_id: sessionId,
+      message_id: messageId,
+      message_text: messageText,
+      locale: 'en-US',
     });
     return response.data;
   }
 
-  async searchFAQ(query: string, sessionId: string): Promise<t.FAQSearchResponse> {
+  async searchFAQ(queryText: string, sessionId: string, intent: string): Promise<t.FAQSearchResponse> {
     const response = await this.client.post<t.FAQSearchResponse>('/faq/search', {
-      query,
       session_id: sessionId,
+      query_text: queryText,
+      intent,
+      locale: 'en-US',
     });
     return response.data;
   }
