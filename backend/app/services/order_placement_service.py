@@ -133,7 +133,7 @@ class OrderPlacementService:
         if payload.delivery_option not in {"standard", "express"}:
             issues.append("delivery_option must be one of: standard, express")
 
-        payment_guard_issue = self._validate_payment_reference(payload.payment_method_reference)
+        payment_guard_issue = self._validate_payment_reference(user, payload.payment_method_reference)
         if payment_guard_issue:
             issues.append(payment_guard_issue)
 
@@ -146,19 +146,23 @@ class OrderPlacementService:
             total_cents=cart.subtotal_cents + delivery_fee,
         )
 
-    def authorize_payment_sim(self, payload: PaymentAuthorizeSimRequest) -> PaymentAuthorizeSimResponse:
-        payment_guard_issue = self._validate_payment_reference(payload.payment_method_reference)
+    def authorize_payment_sim(self, user: User, payload: PaymentAuthorizeSimRequest) -> PaymentAuthorizeSimResponse:
+        payment_guard_issue = self._validate_payment_reference(user, payload.payment_method_reference)
         if payment_guard_issue:
             raise ValidationAppError(payment_guard_issue)
 
-        # Deterministic simulation rule: references ending in "_decline" are declined.
-        if payload.payment_method_reference.lower().endswith("_decline"):
+        card_digits = self._normalize_card_digits(payload.payment_method_reference)
+        if card_digits is None:
+            raise ValidationAppError("Card number must contain 16 digits")
+
+        # Deterministic simulation rule: card ending with 0000 is declined.
+        if card_digits.endswith("0000"):
             return PaymentAuthorizeSimResponse(
                 authorized=False,
                 reason="Simulated payment authorization decline",
             )
 
-        auth_seed = f"{payload.payment_method_reference}:{payload.amount_cents}:{payload.currency}"
+        auth_seed = f"{card_digits}:{payload.amount_cents}:{payload.currency}"
         auth_code = hashlib.sha256(auth_seed.encode("utf-8")).hexdigest()[:12]
         return PaymentAuthorizeSimResponse(
             authorized=True,
@@ -191,6 +195,7 @@ class OrderPlacementService:
             raise ValidationAppError("Checkout validation failed", details={"issues": checkout.issues})
 
         payment = self.authorize_payment_sim(
+            user,
             PaymentAuthorizeSimRequest(
                 payment_method_reference=payload.payment_method_reference,
                 amount_cents=checkout.total_cents,
@@ -275,20 +280,48 @@ class OrderPlacementService:
             currency="USD",
         )
 
-    def _validate_payment_reference(self, reference: str) -> str | None:
-        if not reference.startswith("sim_"):
-            return "payment_method_reference must start with sim_ (simulation-only token)"
+    def _validate_payment_reference(self, user: User, reference: str) -> str | None:
+        if user.is_guest:
+            return "Guest users cannot use checkout payment"
 
-        # Guardrail against sending real card-like numbers.
-        digits = re.sub(r"\D", "", reference)
-        if 13 <= len(digits) <= 19:
-            return "Real card data is prohibited in MVP"
+        if not user.demo_card_number:
+            return "No demo card assigned to account"
 
-        blocked_tokens = ("cvv", "cvc", "expiry", "exp", "pan")
-        lowered = reference.lower()
-        if any(token in lowered for token in blocked_tokens):
-            return "Real card fields are prohibited in MVP"
+        card_digits = self._normalize_card_digits(reference)
+        if card_digits is None:
+            return "Card number must contain 16 digits"
+
+        assigned_digits = self._normalize_card_digits(user.demo_card_number)
+        if assigned_digits is None:
+            return "Assigned demo card is invalid"
+
+        if card_digits != assigned_digits:
+            return "Card number must match your assigned demo card"
+
+        if not self._is_luhn_valid(card_digits):
+            return "Card number failed validation"
         return None
+
+    @staticmethod
+    def _normalize_card_digits(value: str) -> str | None:
+        digits = re.sub(r"\D", "", value or "")
+        if len(digits) != 16:
+            return None
+        return digits
+
+    @staticmethod
+    def _is_luhn_valid(card_number: str) -> bool:
+        digits = [int(ch) for ch in card_number]
+        checksum = 0
+        parity = len(digits) % 2
+        for idx, digit in enumerate(digits):
+            value = digit
+            if idx % 2 == parity:
+                value *= 2
+                if value > 9:
+                    value -= 9
+            checksum += value
+        return checksum % 10 == 0
 
     def _load_catalog(self) -> dict[str, CatalogItemResponse]:
         data = load_mock_data(self.settings.mock_data_path)

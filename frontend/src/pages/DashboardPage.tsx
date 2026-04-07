@@ -1,13 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/services/apiClient';
-import { Card, Alert } from '@/components/UI';
+import { Card, Alert, Button, Input } from '@/components/UI';
 
 export function DashboardPage() {
   const { user, isGuest } = useAuth();
-  const [accountInfo, setAccountInfo] = useState<{ masked_email: string } | null>(null);
+  const [accountInfo, setAccountInfo] = useState<{ masked_email: string; demo_card_last4?: string | null } | null>(null);
+  const [demoCardPassword, setDemoCardPassword] = useState('');
+  const [revealedDemoCard, setRevealedDemoCard] = useState('');
+  const [revealingCard, setRevealingCard] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const handleRevealDemoCard = async () => {
+    if (!demoCardPassword.trim()) {
+      setError('Please enter your password to reveal the demo card.');
+      return;
+    }
+
+    try {
+      setError('');
+      setRevealingCard(true);
+      const response = await apiClient.revealDemoCard(demoCardPassword);
+      setRevealedDemoCard(response.demo_card_number);
+      setDemoCardPassword('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reveal demo card');
+    } finally {
+      setRevealingCard(false);
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -18,7 +40,10 @@ export function DashboardPage() {
           setAccountInfo({ masked_email: user?.email || 'Guest user' });
         } else {
           const accData = await apiClient.getAccountMe();
-          setAccountInfo({ masked_email: accData.email_masked || 'Unknown account' });
+          setAccountInfo({
+            masked_email: accData.email_masked || 'Unknown account',
+            demo_card_last4: accData.demo_card_last4,
+          });
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -59,6 +84,26 @@ export function DashboardPage() {
               <span className="text-yellow-600">⏳ Pending Verification</span>
             )}
           </p>
+          {!isGuest && accountInfo?.demo_card_last4 && (
+            <div className="rounded-md border border-cyan-100 bg-cyan-50 p-3 space-y-3 mt-2">
+              <p className="text-gray-700">
+                <span className="font-semibold">Demo Card:</span> **** **** **** {accountInfo.demo_card_last4}
+              </p>
+              <Input
+                label="Enter password to reveal card"
+                type="password"
+                value={demoCardPassword}
+                onChange={(e) => setDemoCardPassword(e.target.value)}
+                placeholder="Your account password"
+              />
+              <Button variant="outline" size="sm" onClick={handleRevealDemoCard} disabled={revealingCard}>
+                {revealingCard ? 'Revealing...' : 'Reveal Full Card'}
+              </Button>
+              <p className="text-sm font-mono text-cyan-950">
+                {revealedDemoCard || 'Card is hidden'}
+              </p>
+            </div>
+          )}
           {isGuest && (
             <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded">
               <p className="text-sm text-orange-800">

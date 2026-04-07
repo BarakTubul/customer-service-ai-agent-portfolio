@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -42,3 +45,33 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def ensure_demo_card(self, user: User) -> User:
+        if user.demo_card_number:
+            return user
+
+        card_number = self._build_demo_card_number(user.id)
+        user.demo_card_number = card_number
+        user.demo_card_assigned_at = datetime.now(UTC)
+        return self.update(user)
+
+    @staticmethod
+    def _build_demo_card_number(user_id: int) -> str:
+        seed = hashlib.sha256(f"demo-card:{user_id}".encode("utf-8")).hexdigest()
+        body = "4" + "".join(str(int(char, 16) % 10) for char in seed[:14])
+        checksum = UserRepository._luhn_check_digit(body)
+        return f"{body}{checksum}"
+
+    @staticmethod
+    def _luhn_check_digit(number_without_check: str) -> int:
+        digits = [int(ch) for ch in number_without_check]
+        parity = (len(digits) + 1) % 2
+        total = 0
+        for idx, digit in enumerate(digits):
+            value = digit
+            if idx % 2 == parity:
+                value *= 2
+                if value > 9:
+                    value -= 9
+            total += value
+        return (10 - (total % 10)) % 10

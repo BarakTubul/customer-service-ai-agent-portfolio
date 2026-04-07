@@ -3,11 +3,14 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime, timedelta
 
-from app.core.errors import ForbiddenError, NotFoundError
+from app.core.errors import ForbiddenError, NotFoundError, UnauthorizedError
+from app.core.security import verify_password
 from app.models.user import User
 from app.repositories.order_repository import OrderRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.account import (
     AccountMeResponse,
+    DemoCardRevealResponse,
     OrderResponse,
     OrderTimelineEvent,
     OrderTimelineResponse,
@@ -16,8 +19,9 @@ from app.schemas.account import (
 
 
 class AccountOrderService:
-    def __init__(self, order_repository: OrderRepository) -> None:
+    def __init__(self, order_repository: OrderRepository, user_repository: UserRepository) -> None:
         self.order_repository = order_repository
+        self.user_repository = user_repository
 
     def get_session_state(self, user: User) -> SessionStateResponse:
         return SessionStateResponse(
@@ -31,12 +35,28 @@ class AccountOrderService:
         if user.is_guest:
             raise ForbiddenError("Guest users cannot access account profile")
 
+        user = self.user_repository.ensure_demo_card(user)
+
         status = "verified_active" if user.is_verified and user.is_active else "restricted"
         return AccountMeResponse(
             user_id=user.id,
             email_masked=self._mask_email(user.email),
             account_status=status,
+            demo_card_last4=self._card_last4(user.demo_card_number),
         )
+
+    def reveal_demo_card(self, *, user: User, password: str) -> DemoCardRevealResponse:
+        if user.is_guest:
+            raise ForbiddenError("Guest users cannot access demo card")
+        if not user.password_hash:
+            raise ForbiddenError("Password is not configured for this account")
+        if not verify_password(password, user.password_hash):
+            raise UnauthorizedError("Invalid password")
+
+        user = self.user_repository.ensure_demo_card(user)
+        if not user.demo_card_number:
+            raise NotFoundError("Demo card not found")
+        return DemoCardRevealResponse(demo_card_number=user.demo_card_number)
 
     def list_orders(self, user: User) -> list[OrderResponse]:
         if user.is_guest:
@@ -80,12 +100,12 @@ class AccountOrderService:
             return order.eta_from, order.eta_to
 
         now = datetime.now(UTC)
-        eta_from = order.created_at.astimezone(UTC) + timedelta(minutes=35)
-        eta_to = order.created_at.astimezone(UTC) + timedelta(minutes=50)
+        eta_from = order.created_at.astimezone(UTC) + timedelta(seconds=35)
+        eta_to = order.created_at.astimezone(UTC) + timedelta(seconds=50)
 
         if now > eta_to:
-            eta_from = now + timedelta(minutes=10)
-            eta_to = now + timedelta(minutes=20)
+            eta_from = now + timedelta(seconds=10)
+            eta_to = now + timedelta(seconds=20)
 
         return eta_from, eta_to
 
@@ -101,7 +121,7 @@ class AccountOrderService:
         offset = int(seed[:2], 16) % 5
         base_time = order.created_at.astimezone(UTC)
         now = datetime.now(UTC)
-        simulated_now = max(now, base_time + timedelta(minutes=30 + offset))
+        simulated_now = max(now, base_time + timedelta(seconds=30 + offset))
 
         stage_definitions = [
             ("accepted", 2 + offset),
@@ -113,13 +133,13 @@ class AccountOrderService:
         ]
 
         events = [
-            OrderTimelineEvent(event=event_name, timestamp=base_time + timedelta(minutes=minutes_after), source="sim")
-            for event_name, minutes_after in stage_definitions
-            if base_time + timedelta(minutes=minutes_after) <= simulated_now
+            OrderTimelineEvent(event=event_name, timestamp=base_time + timedelta(seconds=seconds_after), source="sim")
+            for event_name, seconds_after in stage_definitions
+            if base_time + timedelta(seconds=seconds_after) <= simulated_now
         ]
 
         if not events:
-            events = [OrderTimelineEvent(event="accepted", timestamp=base_time + timedelta(minutes=2 + offset), source="sim")]
+            events = [OrderTimelineEvent(event="accepted", timestamp=base_time + timedelta(seconds=2 + offset), source="sim")]
         return OrderTimelineResponse(order_id=order.order_id, scenario_id=scenario_id, events=events)
 
     @staticmethod
@@ -134,3 +154,12 @@ class AccountOrderService:
         else:
             masked_name = f"{name[0]}***{name[-1]}"
         return f"{masked_name}@{domain}"
+
+    @staticmethod
+    def _card_last4(card_number: str | None) -> str | None:
+        if not card_number:
+            return None
+        digits = "".join(ch for ch in card_number if ch.isdigit())
+        if len(digits) < 4:
+            return None
+        return digits[-4:]

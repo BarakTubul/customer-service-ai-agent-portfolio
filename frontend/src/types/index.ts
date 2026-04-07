@@ -24,10 +24,24 @@ export interface AuthTokenResponse {
   is_guest: boolean;
 }
 
+export interface LiveNotification {
+  notification_id: string;
+  order_id: string;
+  status: string;
+  title: string;
+  message: string;
+  created_at: string;
+}
+
 export interface AccountMeResponse {
   user_id: number;
   email_masked: string | null;
   account_status: string;
+  demo_card_last4?: string | null;
+}
+
+export interface DemoCardRevealResponse {
+  demo_card_number: string;
 }
 
 export interface Order {

@@ -25,6 +25,7 @@ class AuthService:
             email=email,
             password_hash=hash_password(password),
         )
+        user = self.user_repository.ensure_demo_card(user)
         token = create_access_token(str(user.id), is_guest=False)
         return TokenResponse(access_token=token, user_id=user.id, is_guest=False)
 
@@ -36,6 +37,9 @@ class AuthService:
             raise UnauthorizedError("Invalid email or password")
         if not user.is_active:
             raise ForbiddenError("Account is not active")
+
+        if not user.is_guest:
+            user = self.user_repository.ensure_demo_card(user)
 
         token = create_access_token(str(user.id), is_guest=user.is_guest)
         return TokenResponse(access_token=token, user_id=user.id, is_guest=user.is_guest)
@@ -53,6 +57,7 @@ class AuthService:
         guest_user.is_guest = False
         guest_user.is_verified = True
         user = self.user_repository.update(guest_user)
+        user = self.user_repository.ensure_demo_card(user)
 
         token = create_access_token(str(user.id), is_guest=False)
         return TokenResponse(access_token=token, user_id=user.id, is_guest=False)

@@ -6,6 +6,8 @@ from app.api.dependencies import get_account_order_service, get_current_user
 from app.models.user import User
 from app.schemas.account import (
     AccountMeResponse,
+    DemoCardRevealRequest,
+    DemoCardRevealResponse,
     OrderResponse,
     OrderTimelineResponse,
     SessionStateResponse,
@@ -29,6 +31,15 @@ def get_account_me(
     account_order_service: AccountOrderService = Depends(get_account_order_service),
 ) -> AccountMeResponse:
     return account_order_service.get_account_me(current_user)
+
+
+@router.post("/account/demo-card/reveal", response_model=DemoCardRevealResponse)
+def reveal_demo_card(
+    payload: DemoCardRevealRequest,
+    current_user: User = Depends(get_current_user),
+    account_order_service: AccountOrderService = Depends(get_account_order_service),
+) -> DemoCardRevealResponse:
+    return account_order_service.reveal_demo_card(user=current_user, password=payload.password)
 
 
 @router.get("/orders", response_model=list[OrderResponse])

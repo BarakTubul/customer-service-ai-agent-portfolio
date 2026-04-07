@@ -16,6 +16,15 @@ class AccountMeResponse(BaseModel):
     user_id: int
     email_masked: str | None
     account_status: str
+    demo_card_last4: str | None = None
+
+
+class DemoCardRevealRequest(BaseModel):
+    password: str
+
+
+class DemoCardRevealResponse(BaseModel):
+    demo_card_number: str
 
 
 class OrderTimelineEvent(BaseModel):

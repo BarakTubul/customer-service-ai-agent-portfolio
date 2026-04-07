@@ -46,8 +46,8 @@ export function OrderTimelinePage() {
     return (
       <div className="max-w-4xl mx-auto p-6 space-y-4">
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-        <Button onClick={() => navigate('/dashboard')} variant="outline">
-          Back to Dashboard
+        <Button onClick={() => navigate('/orders')} variant="outline">
+          Back to My Orders
         </Button>
       </div>
     );
@@ -91,8 +91,8 @@ export function OrderTimelinePage() {
         <p className="mt-4 text-sm text-gray-600">The timeline shows the live fulfillment state.</p>
       </Card>
 
-      <Link to="/dashboard" className="text-blue-600 hover:underline text-sm font-semibold">
-        Back to Dashboard
+      <Link to="/orders" className="text-blue-600 hover:underline text-sm font-semibold">
+        Back to My Orders
       </Link>
     </div>
   );

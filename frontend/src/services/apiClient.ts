@@ -57,8 +57,10 @@ function formatAxiosError(error: unknown): string {
 
 class APIClient {
   private client: AxiosInstance;
+  private accessToken: string | null;
 
   constructor() {
+    this.accessToken = sessionStorage.getItem('access_token');
     this.client = axios.create({
       baseURL: API_BASE_URL,
       withCredentials: true,
@@ -69,6 +71,12 @@ class APIClient {
 
     this.client.interceptors.request.use((config) => {
       const method = (config.method || 'GET').toUpperCase();
+
+      if (this.accessToken) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${this.accessToken}`;
+      }
+
       console.debug(`[api] request ${method} ${config.baseURL || ''}${config.url || ''}`, {
         withCredentials: config.withCredentials ?? false,
       });
@@ -102,9 +110,23 @@ class APIClient {
     );
   }
 
+  private setAccessToken(token: string | null): void {
+    this.accessToken = token;
+    if (token) {
+      sessionStorage.setItem('access_token', token);
+      return;
+    }
+    sessionStorage.removeItem('access_token');
+  }
+
+  getAccessToken(): string | null {
+    return this.accessToken;
+  }
+
   // Auth endpoints
   async guestAccess(email: string): Promise<t.AuthTokenResponse> {
     const response = await this.client.post<t.AuthTokenResponse>('/auth/guest', { email });
+    this.setAccessToken(response.data.access_token);
     return response.data;
   }
 
@@ -113,6 +135,7 @@ class APIClient {
       email,
       password,
     });
+    this.setAccessToken(response.data.access_token);
     return response.data;
   }
 
@@ -121,6 +144,7 @@ class APIClient {
       email,
       password,
     });
+    this.setAccessToken(response.data.access_token);
     return response.data;
   }
 
@@ -128,11 +152,13 @@ class APIClient {
     const response = await this.client.post<t.AuthTokenResponse>('/auth/guest/convert', {
       password,
     });
+    this.setAccessToken(response.data.access_token);
     return response.data;
   }
 
   async logout(): Promise<void> {
     await this.client.post('/auth/logout');
+    this.setAccessToken(null);
   }
 
   // Account endpoints
@@ -143,6 +169,13 @@ class APIClient {
 
   async getAccountMe(): Promise<t.AccountMeResponse> {
     const response = await this.client.get<t.AccountMeResponse>('/account/me');
+    return response.data;
+  }
+
+  async revealDemoCard(password: string): Promise<t.DemoCardRevealResponse> {
+    const response = await this.client.post<t.DemoCardRevealResponse>('/account/demo-card/reveal', {
+      password,
+    });
     return response.data;
   }
 
@@ -202,6 +235,11 @@ class APIClient {
     const response = await this.client.get<t.ConversationMessage[]>(
       `/conversations/${sessionId}/context`
     );
+    return response.data;
+  }
+
+  async getLiveNotifications(): Promise<t.LiveNotification[]> {
+    const response = await this.client.get<t.LiveNotification[]>('/notifications/live');
     return response.data;
   }
 

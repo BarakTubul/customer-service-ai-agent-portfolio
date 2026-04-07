@@ -24,6 +24,7 @@ from app.services.account_order_service import AccountOrderService
 from app.services.auth_service import AuthService
 from app.services.intent_faq_service import IntentFAQService
 from app.services.order_placement_service import OrderPlacementService
+from app.services.notification_service import NotificationService
 from app.services.refund_service import RefundService
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -43,14 +44,21 @@ def get_order_repository(db: Session = Depends(get_db)) -> OrderRepository:
 
 def get_account_order_service(
     order_repository: OrderRepository = Depends(get_order_repository),
+    user_repository: UserRepository = Depends(get_user_repository),
 ) -> AccountOrderService:
-    return AccountOrderService(order_repository)
+    return AccountOrderService(order_repository, user_repository)
 
 
 def get_order_placement_service(
     order_repository: OrderRepository = Depends(get_order_repository),
 ) -> OrderPlacementService:
     return OrderPlacementService(order_repository)
+
+
+def get_notification_service(
+    account_order_service: AccountOrderService = Depends(get_account_order_service),
+) -> NotificationService:
+    return NotificationService(account_order_service)
 
 
 def get_refund_repository(db: Session = Depends(get_db)) -> RefundRepository:

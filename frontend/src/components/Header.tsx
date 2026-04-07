@@ -1,11 +1,17 @@
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/UI';
+import { apiClient } from '@/services/apiClient';
+import * as t from '@/types';
 
 export function Header() {
   const { user, logout, isGuest } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [notifications, setNotifications] = useState<t.LiveNotification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const seenNotificationIds = useRef(new Set<string>());
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
@@ -14,6 +20,59 @@ export function Header() {
     { label: 'Order', path: '/order' },
     { label: 'Refunds', path: '/refund' },
   ];
+
+  useEffect(() => {
+    if (!user || isGuest) {
+      setNotifications([]);
+      setShowNotifications(false);
+      seenNotificationIds.current.clear();
+      return;
+    }
+
+    const token = apiClient.getAccessToken();
+    const wsUrl = token
+      ? `ws://localhost:8000/api/v1/ws/notifications?token=${encodeURIComponent(token)}`
+      : 'ws://localhost:8000/api/v1/ws/notifications';
+    const socket = new WebSocket(wsUrl);
+
+    socket.onmessage = (event) => {
+      try {
+        const incoming = JSON.parse(event.data) as t.LiveNotification[];
+        if (incoming.length === 0) {
+          return;
+        }
+
+        const newNotifications = incoming.filter(
+          (notification) => !seenNotificationIds.current.has(notification.notification_id)
+        );
+
+        if (newNotifications.length === 0) {
+          return;
+        }
+
+        newNotifications.forEach((notification) => {
+          seenNotificationIds.current.add(notification.notification_id);
+        });
+
+        setNotifications((current) => [...newNotifications, ...current].slice(0, 6));
+
+        const alertText = newNotifications
+          .map((notification) => `${notification.title}: ${notification.message}`)
+          .join('\n');
+        window.alert(alertText);
+      } catch (error) {
+        console.error('[notifications] failed to parse live update', error);
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error('[notifications] websocket error', error);
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, [user, isGuest]);
 
   return (
     <header className="sticky top-0 z-20 border-b border-cyan-100 bg-white/80 shadow-sm backdrop-blur">
@@ -49,6 +108,57 @@ export function Header() {
         <div className="flex items-center gap-4">
           {user && (
             <>
+              <div className="relative">
+                <Button
+                  onClick={() => setShowNotifications((current) => !current)}
+                  variant="outline"
+                  size="sm"
+                >
+                  Notifications {notifications.length > 0 ? `(${notifications.length})` : ''}
+                </Button>
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 rounded-xl border border-gray-200 bg-white shadow-lg p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold text-gray-900">Live updates</p>
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500 hover:text-gray-900"
+                        onClick={() => setNotifications([])}
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                    {notifications.length === 0 ? (
+                      <p className="text-sm text-gray-500">No new notifications.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-72 overflow-y-auto">
+                        {notifications.map((notification) => (
+                          <button
+                            key={notification.notification_id}
+                            type="button"
+                            className="w-full text-left rounded-lg border border-gray-100 p-3 hover:bg-gray-50 transition"
+                            onClick={() => {
+                              navigate(`/orders/${notification.order_id}/timeline`);
+                              setShowNotifications(false);
+                            }}
+                          >
+                            <p className="text-sm font-semibold text-gray-900">{notification.title}</p>
+                            <p className="text-sm text-gray-600">{notification.message}</p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {new Date(notification.created_at).toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="text-right px-3 py-1.5 rounded-xl border border-gray-200 bg-white/70">
                 <p className="text-sm font-semibold text-gray-900">{user.email}</p>
                 <p className="text-xs text-gray-500 font-medium">

@@ -50,5 +50,40 @@ def test_convert_guest_to_registered_flips_is_guest() -> None:
         assert user is not None
         assert user.is_guest is False
         assert user.email == "guest@example.com"
+        assert user.demo_card_number is not None
+    finally:
+        session.close()
+
+
+def test_register_assigns_demo_card() -> None:
+    session = build_session()
+    try:
+        service = AuthService(UserRepository(session))
+        token = service.register(email="new-user@example.com", password="strong-password")
+
+        user = session.get(User, token.user_id)
+        assert user is not None
+        assert user.demo_card_number is not None
+        assert len(user.demo_card_number) == 16
+    finally:
+        session.close()
+
+
+def test_login_backfills_demo_card_for_existing_registered_user() -> None:
+    session = build_session()
+    try:
+        service = AuthService(UserRepository(session))
+        _ = service.register(email="legacy@example.com", password="strong-password")
+
+        user = session.query(User).filter(User.email == "legacy@example.com").one()
+        user.demo_card_number = None
+        session.add(user)
+        session.commit()
+
+        _ = service.login(email="legacy@example.com", password="strong-password")
+
+        refreshed = session.get(User, user.id)
+        assert refreshed is not None
+        assert refreshed.demo_card_number is not None
     finally:
         session.close()

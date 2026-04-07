@@ -106,10 +106,10 @@ def validate_checkout(
 @router.post("/payments/authorize-sim", response_model=PaymentAuthorizeSimResponse)
 def authorize_payment_sim(
     payload: PaymentAuthorizeSimRequest,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     order_placement_service: OrderPlacementService = Depends(get_order_placement_service),
 ) -> PaymentAuthorizeSimResponse:
-    return order_placement_service.authorize_payment_sim(payload)
+    return order_placement_service.authorize_payment_sim(current_user, payload)
 
 
 @router.post("/orders", response_model=OrderCreateResponse, status_code=status.HTTP_201_CREATED)

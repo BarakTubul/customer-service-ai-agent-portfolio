@@ -28,9 +28,9 @@ function buildCatalogCacheKey(params: t.CatalogQueryParams): string {
   ].join('|');
 }
 
-function generateDemoPaymentReference(shouldDecline = false): string {
-  const seed = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  return shouldDecline ? `sim_demo_${seed}_decline` : `sim_demo_${seed}`;
+function formatCardInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 16);
+  return digits.replace(/(.{4})/g, '$1 ').trim();
 }
 
 export function OrderPlacementPage() {
@@ -58,7 +58,7 @@ export function OrderPlacementPage() {
     line1: '',
     city: '',
   });
-  const [paymentReference, setPaymentReference] = useState('sim_card_ok_001');
+  const [paymentReference, setPaymentReference] = useState('');
   const [scenario, setScenario] = useState('default');
   const [showCheckout, setShowCheckout] = useState(false);
   const [checkout, setCheckout] = useState<t.CheckoutValidateResponse | null>(null);
@@ -174,7 +174,7 @@ export function OrderPlacementPage() {
     };
 
     loadOrderData();
-  }, []);
+  }, [isGuest]);
 
   const reloadCart = async () => {
     const updated = await apiClient.getCart();
@@ -523,37 +523,17 @@ export function OrderPlacementPage() {
                     </select>
                   </div>
                   <Input
-                    label="Payment reference"
+                    label="Card number"
                     value={paymentReference}
-                    onChange={(e) => setPaymentReference(e.target.value)}
-                    placeholder="sim_card_ok_001"
+                    onChange={(e) => setPaymentReference(formatCardInput(e.target.value))}
+                    placeholder="4111 1111 1111 1111"
                   />
                   <div className="rounded-md border border-cyan-100 bg-cyan-50/70 p-3">
-                    <p className="text-sm font-semibold text-cyan-900">Demo card token</p>
+                    <p className="text-sm font-semibold text-cyan-900">Use your revealed demo card</p>
                     <p className="text-xs text-cyan-800 mt-1">
-                      Generate a simulation token and use it as payment reference.
+                      Reveal the full card in Profile, then enter it here.
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setPaymentReference(generateDemoPaymentReference(false))}
-                      >
-                        Generate success token
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setPaymentReference(generateDemoPaymentReference(true))}
-                      >
-                        Generate decline token
-                      </Button>
-                    </div>
-                    <p className="text-xs text-cyan-800 mt-2">
-                      Tip: tokens ending with <span className="font-semibold">_decline</span> simulate payment failure.
-                    </p>
+                    <p className="text-xs text-cyan-800 mt-2">Tip: card numbers ending with 0000 simulate payment decline.</p>
                   </div>
                   <Input
                     label="Scenario"
