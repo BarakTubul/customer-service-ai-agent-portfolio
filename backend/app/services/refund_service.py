@@ -39,6 +39,8 @@ class RefundService:
             eligible=decision.eligible,
             resolution_action=decision.resolution_action,
             decision_reason_codes=decision.decision_reason_codes,
+            explanation_template_key=decision.explanation_template_key,
+            explanation_params=decision.explanation_params,
             policy_version=decision.policy_version,
             policy_reference=decision.policy_reference,
             refundable_amount=MoneyAmount(currency="USD", value=decision.refundable_amount_value),

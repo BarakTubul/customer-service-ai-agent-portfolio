@@ -59,6 +59,8 @@ class RefundEligibilityCheckResponse(BaseModel):
     eligible: bool
     resolution_action: RefundResolutionAction
     decision_reason_codes: list[RefundDecisionReasonCode]
+    explanation_template_key: str
+    explanation_params: dict[str, str | int | float | bool]
     policy_version: RefundPolicyVersion
     policy_reference: str
     refundable_amount: MoneyAmount

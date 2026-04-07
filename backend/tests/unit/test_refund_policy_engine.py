@@ -41,6 +41,8 @@ def test_policy_engine_denies_non_refundable_scenario() -> None:
     assert decision.resolution_action == RefundResolutionAction.DENY
     assert decision.decision_reason_codes == [RefundDecisionReasonCode.NON_REFUNDABLE_ITEM]
     assert decision.refundable_amount_value == 0.0
+    assert decision.explanation_template_key == "refund.scenario_hard_deny"
+    assert decision.explanation_params["scenario_id"] == "non-refundable"
 
 
 def test_policy_engine_partial_for_missing_item() -> None:
@@ -57,6 +59,9 @@ def test_policy_engine_partial_for_missing_item() -> None:
     assert decision.resolution_action == RefundResolutionAction.APPROVE_PARTIAL
     assert decision.decision_reason_codes == [RefundDecisionReasonCode.ELIGIBLE_PARTIAL]
     assert decision.refundable_amount_value == 8.0
+    assert decision.explanation_template_key == "refund.reason_policy_outcome"
+    assert decision.explanation_params["submitted_reason"] == "missing_item"
+    assert decision.explanation_params["resolution_action"] == RefundResolutionAction.APPROVE_PARTIAL
 
 
 def test_policy_engine_emits_policy_version_v1() -> None:

@@ -57,6 +57,8 @@ def test_eligibility_ineligible_for_expired_window() -> None:
         assert response.eligible is False
         assert response.resolution_action == RefundResolutionAction.DENY
         assert RefundDecisionReasonCode.REFUND_WINDOW_EXPIRED in response.decision_reason_codes
+        assert response.explanation_template_key == "refund.scenario_hard_deny"
+        assert response.explanation_params["scenario_id"] == "expired-window"
         assert response.policy_version == RefundPolicyVersion.V1
     finally:
         session.close()
@@ -82,6 +84,8 @@ def test_eligibility_partial_for_missing_item() -> None:
         assert response.eligible is True
         assert response.resolution_action == RefundResolutionAction.APPROVE_PARTIAL
         assert response.decision_reason_codes == [RefundDecisionReasonCode.ELIGIBLE_PARTIAL]
+        assert response.explanation_template_key == "refund.reason_policy_outcome"
+        assert response.explanation_params["submitted_reason"] == RefundReasonCode.MISSING_ITEM
         assert response.refundable_amount.value == 8.0
     finally:
         session.close()
