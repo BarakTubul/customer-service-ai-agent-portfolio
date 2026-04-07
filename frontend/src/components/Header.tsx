@@ -15,16 +15,14 @@ export function Header() {
   const seenNotificationIds = useRef(new Set<string>());
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const navItems = [
-    { label: 'My Orders', path: '/orders' },
-    { label: 'Chat', path: '/chat' },
-    { label: 'Order', path: '/order' },
-    { label: 'Refunds', path: '/refund' },
-  ];
-
-  if (user?.is_admin) {
-    navItems.push({ label: 'Admin', path: '/admin/refunds' });
-  }
+  const navItems = user?.is_admin
+    ? [{ label: 'Refund Reviews', path: '/admin/refunds' }]
+    : [
+        { label: 'My Orders', path: '/orders' },
+        { label: 'Chat', path: '/chat' },
+        { label: 'Order', path: '/order' },
+        { label: 'Refunds', path: '/refund' },
+      ];
 
   useEffect(() => {
     if (!user || isGuest) {
