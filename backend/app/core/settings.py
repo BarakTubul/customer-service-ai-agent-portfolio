@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     auth_cookie_name: str = "access_token"
     cors_origins_raw: str = "http://localhost:3000"
-    admin_api_key: str = "dev-admin-key"
+    admin_emails_raw: str = "admin@example.com"
 
     llm_provider: str = "mock"
     openai_api_key: str | None = None
@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
+
+    @property
+    def admin_emails(self) -> set[str]:
+        return {
+            email.strip().lower()
+            for email in self.admin_emails_raw.split(",")
+            if email.strip()
+        }
 
     @property
     def is_dev(self) -> bool:

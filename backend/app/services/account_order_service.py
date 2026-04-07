@@ -28,6 +28,7 @@ class AccountOrderService:
             authenticated=True,
             user_id=user.id,
             is_guest=user.is_guest,
+            is_admin=user.is_admin,
             is_active=user.is_active,
         )
 
@@ -42,6 +43,7 @@ class AccountOrderService:
             user_id=user.id,
             email_masked=self._mask_email(user.email),
             account_status=status,
+            is_admin=user.is_admin,
             demo_card_last4=self._card_last4(user.demo_card_number),
         )
 

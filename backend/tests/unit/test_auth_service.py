@@ -87,3 +87,16 @@ def test_login_backfills_demo_card_for_existing_registered_user() -> None:
         assert refreshed.demo_card_number is not None
     finally:
         session.close()
+
+
+def test_register_marks_admin_from_configured_email() -> None:
+    session = build_session()
+    try:
+        service = AuthService(UserRepository(session))
+        token = service.register(email="admin@example.com", password="strong-password")
+
+        user = session.get(User, token.user_id)
+        assert user is not None
+        assert user.is_admin is True
+    finally:
+        session.close()

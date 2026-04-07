@@ -135,8 +135,8 @@ def test_admin_manual_review_queue_and_decision_flow(client: TestClient, db_sess
     request_id = created.json()["refund_request_id"]
     assert created.json()["status"] == "pending_manual_review"
 
-    admin_token = _register_and_get_token(client, "admin-reviewer@example.com")
-    admin_headers = {"Authorization": f"Bearer {admin_token}", "X-Admin-Api-Key": "dev-admin-key"}
+    admin_token = _register_and_get_token(client, "admin@example.com")
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     queue = client.get("/api/v1/admin/refunds/manual-review/queue", headers=admin_headers)
     assert queue.status_code == 200
@@ -160,8 +160,8 @@ def test_admin_manual_review_queue_and_decision_flow(client: TestClient, db_sess
     assert "Approved after verification" in (decision.json()["status_reason"] or "")
 
 
-def test_admin_manual_review_requires_admin_key(client: TestClient) -> None:
-    admin_token = _register_and_get_token(client, "admin-no-key@example.com")
+def test_admin_manual_review_requires_admin_role(client: TestClient) -> None:
+    admin_token = _register_and_get_token(client, "regular-user-no-admin@example.com")
     response = client.get(
         "/api/v1/admin/refunds/manual-review/queue",
         headers={"Authorization": f"Bearer {admin_token}"},

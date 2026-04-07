@@ -4,6 +4,7 @@ export interface User {
   user_id: string;
   email: string;
   is_guest: boolean;
+  is_admin: boolean;
   is_verified: boolean;
   is_active: boolean;
   created_at: string;
@@ -13,6 +14,7 @@ export interface SessionState {
   authenticated: boolean;
   user_id: number;
   is_guest: boolean;
+  is_admin: boolean;
   is_active: boolean;
 }
 
@@ -37,6 +39,7 @@ export interface AccountMeResponse {
   user_id: number;
   email_masked: string | null;
   account_status: string;
+  is_admin: boolean;
   demo_card_last4?: string | null;
 }
 
@@ -110,13 +113,32 @@ export interface RefundEligibilityResponse {
 
 export interface RefundRequest {
   refund_request_id: string;
-  user_id: string;
   order_id: string;
-  reason_code: string;
   status: string;
   status_reason?: string;
+  manual_review_handoff?: ManualReviewHandoff | null;
   idempotent_replay: boolean;
   created_at: string;
+}
+
+export interface ManualReviewHandoff {
+  escalation_status: string;
+  queue_name: string;
+  sla_deadline_at: string;
+  payload: Record<string, string | number | boolean>;
+}
+
+export interface ManualReviewQueueItem {
+  refund_request_id: string;
+  order_id: string;
+  status: string;
+  created_at: string;
+  handoff: ManualReviewHandoff;
+}
+
+export interface ManualReviewQueueResponse {
+  items: ManualReviewQueueItem[];
+  total: number;
 }
 
 export interface OrderStateSim {

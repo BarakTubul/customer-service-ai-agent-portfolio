@@ -9,6 +9,7 @@ class SessionStateResponse(BaseModel):
     authenticated: bool
     user_id: int
     is_guest: bool
+    is_admin: bool
     is_active: bool
 
 
@@ -16,6 +17,7 @@ class AccountMeResponse(BaseModel):
     user_id: int
     email_masked: str | None
     account_status: str
+    is_admin: bool
     demo_card_last4: str | None = None
 
 
