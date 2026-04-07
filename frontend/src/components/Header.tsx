@@ -22,6 +22,10 @@ export function Header() {
     { label: 'Refunds', path: '/refund' },
   ];
 
+  if (user?.is_admin) {
+    navItems.push({ label: 'Admin', path: '/admin/refunds' });
+  }
+
   useEffect(() => {
     if (!user || isGuest) {
       setNotifications([]);

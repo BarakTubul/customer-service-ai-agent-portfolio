@@ -296,6 +296,36 @@ class APIClient {
     return response.data;
   }
 
+  async listManualReviewQueue(limit = 50): Promise<t.ManualReviewQueueResponse> {
+    const response = await this.client.get<t.ManualReviewQueueResponse>(
+      '/admin/refunds/manual-review/queue',
+      { params: { limit } }
+    );
+    return response.data;
+  }
+
+  async claimManualReviewRequest(refundRequestId: string): Promise<t.RefundRequest> {
+    const response = await this.client.post<t.RefundRequest>(
+      `/admin/refunds/requests/${refundRequestId}/claim`
+    );
+    return response.data;
+  }
+
+  async decideManualReviewRequest(
+    refundRequestId: string,
+    decision: 'resolved' | 'rejected',
+    reviewerNote?: string
+  ): Promise<t.RefundRequest> {
+    const response = await this.client.post<t.RefundRequest>(
+      `/admin/refunds/requests/${refundRequestId}/decision`,
+      {
+        decision,
+        reviewer_note: reviewerNote || undefined,
+      }
+    );
+    return response.data;
+  }
+
   // Order placement endpoints
   async getCatalogItems(params: t.CatalogQueryParams): Promise<t.CatalogListResponse> {
     const response = await this.client.get<t.CatalogListResponse>('/catalog/items', {

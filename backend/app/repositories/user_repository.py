@@ -14,7 +14,7 @@ class UserRepository:
         self.db = db
 
     def create_guest(self) -> User:
-        user = User(is_guest=True, is_active=True, is_verified=False)
+        user = User(is_guest=True, is_admin=False, is_active=True, is_verified=False)
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
@@ -27,11 +27,12 @@ class UserRepository:
         stmt = select(User).where(User.email == email)
         return self.db.scalar(stmt)
 
-    def create_registered(self, *, email: str, password_hash: str) -> User:
+    def create_registered(self, *, email: str, password_hash: str, is_admin: bool = False) -> User:
         user = User(
             email=email,
             password_hash=password_hash,
             is_guest=False,
+            is_admin=is_admin,
             is_active=True,
             is_verified=True,
         )
@@ -45,6 +46,15 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def sync_admin_flag_for_email(self, *, user: User, admin_emails: set[str]) -> User:
+        if not user.email:
+            return user
+        should_be_admin = user.email.lower() in admin_emails
+        if user.is_admin == should_be_admin:
+            return user
+        user.is_admin = should_be_admin
+        return self.update(user)
 
     def ensure_demo_card(self, user: User) -> User:
         if user.demo_card_number:

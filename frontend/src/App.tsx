@@ -13,10 +13,22 @@ import { OrderTimelinePage } from '@/pages/OrderTimelinePage';
 import { ChatPage } from '@/pages/ChatPage';
 import { OrderPlacementPage } from '@/pages/OrderPlacementPage';
 import { RefundPage } from '@/pages/RefundPage';
+import { AdminRefundReviewPage } from '@/pages/AdminRefundReviewPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+  if (!user?.is_admin) {
+    return <Navigate to="/dashboard" />;
+  }
+  return <>{children}</>;
 }
 
 function AppRoutes() {
@@ -84,6 +96,14 @@ function AppRoutes() {
             <ProtectedRoute>
               <RefundPage />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/refunds"
+          element={
+            <AdminRoute>
+              <AdminRefundReviewPage />
+            </AdminRoute>
           }
         />
       </Routes>
