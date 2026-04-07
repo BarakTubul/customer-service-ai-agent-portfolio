@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 
 from app.core.errors import ForbiddenError, NotFoundError
@@ -11,16 +11,21 @@ from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
 from app.services.refund_policy_engine import RefundPolicyEngine
 from app.schemas.refund import (
+    ManualReviewHandoff,
     MoneyAmount,
     OrderStateSimResponse,
     RefundCreateRequest,
     RefundEligibilityCheckRequest,
     RefundEligibilityCheckResponse,
+    RefundResolutionAction,
     RefundRequestResponse,
 )
 
 
 class RefundService:
+    MANUAL_REVIEW_QUEUE_NAME = "refund-risk-review"
+    MANUAL_REVIEW_SLA_HOURS = 24
+
     def __init__(self, order_repository: OrderRepository, refund_repository: RefundRepository) -> None:
         self.order_repository = order_repository
         self.refund_repository = refund_repository
@@ -71,6 +76,7 @@ class RefundService:
                 order_id=existing.order_id,
                 status=existing.status,
                 status_reason=existing.status_reason,
+                manual_review_handoff=self._build_manual_review_handoff_from_row(existing),
                 created_at=existing.created_at,
                 idempotent_replay=True,
             )
@@ -84,7 +90,17 @@ class RefundService:
                 simulation_scenario_id=payload.simulation_scenario_id,
             ),
         )
+        manual_review_handoff = self._build_manual_review_handoff(
+            user_id=user.id,
+            order_id=order.order_id,
+            reason_code=payload.reason_code,
+            simulation_scenario_id=payload.simulation_scenario_id,
+            eligibility=eligibility,
+        )
+
         status = "submitted" if eligibility.eligible else "denied"
+        if manual_review_handoff is not None:
+            status = "pending_manual_review"
         status_reason = None if eligibility.eligible else ",".join(eligibility.decision_reason_codes)
 
         request_id = hashlib.sha256(
@@ -112,6 +128,14 @@ class RefundService:
                 separators=(",", ":"),
                 sort_keys=True,
             ),
+            escalation_status=manual_review_handoff.escalation_status if manual_review_handoff else None,
+            escalation_queue_name=manual_review_handoff.queue_name if manual_review_handoff else None,
+            escalation_sla_deadline_at=manual_review_handoff.sla_deadline_at if manual_review_handoff else None,
+            escalation_payload_json=(
+                json.dumps(manual_review_handoff.payload, separators=(",", ":"), sort_keys=True)
+                if manual_review_handoff
+                else None
+            ),
         )
 
         return RefundRequestResponse(
@@ -119,6 +143,7 @@ class RefundService:
             order_id=created.order_id,
             status=created.status,
             status_reason=created.status_reason,
+            manual_review_handoff=manual_review_handoff,
             created_at=created.created_at,
             idempotent_replay=False,
         )
@@ -135,6 +160,7 @@ class RefundService:
             order_id=row.order_id,
             status=row.status,
             status_reason=row.status_reason,
+            manual_review_handoff=self._build_manual_review_handoff_from_row(row),
             created_at=row.created_at,
             idempotent_replay=False,
         )
@@ -197,3 +223,54 @@ class RefundService:
             else:
                 serialized[key] = value
         return serialized
+
+    def _build_manual_review_handoff(
+        self,
+        *,
+        user_id: int,
+        order_id: str,
+        reason_code: str,
+        simulation_scenario_id: str,
+        eligibility: RefundEligibilityCheckResponse,
+    ) -> ManualReviewHandoff | None:
+        if eligibility.resolution_action != RefundResolutionAction.MANUAL_REVIEW:
+            return None
+
+        created_at = datetime.now(UTC)
+        return ManualReviewHandoff(
+            escalation_status="queued",
+            queue_name=self.MANUAL_REVIEW_QUEUE_NAME,
+            sla_deadline_at=created_at + timedelta(hours=self.MANUAL_REVIEW_SLA_HOURS),
+            payload={
+                "user_id": user_id,
+                "order_id": order_id,
+                "reason_code": self._serialize_scalar(reason_code),
+                "simulation_scenario_id": simulation_scenario_id,
+                "decision_reason_codes": ",".join(eligibility.decision_reason_codes),
+                "policy_version": self._serialize_scalar(eligibility.policy_version),
+                "policy_reference": eligibility.policy_reference,
+                "resolution_action": self._serialize_scalar(eligibility.resolution_action),
+                "refundable_amount": eligibility.refundable_amount.value,
+                "currency": eligibility.refundable_amount.currency,
+                "explanation_template_key": eligibility.explanation_template_key,
+            },
+        )
+
+    @staticmethod
+    def _build_manual_review_handoff_from_row(row) -> ManualReviewHandoff | None:
+        if row.escalation_status is None:
+            return None
+        payload_raw = row.escalation_payload_json or "{}"
+        payload = json.loads(payload_raw)
+        return ManualReviewHandoff(
+            escalation_status=row.escalation_status,
+            queue_name=row.escalation_queue_name,
+            sla_deadline_at=row.escalation_sla_deadline_at,
+            payload=payload,
+        )
+
+    @staticmethod
+    def _serialize_scalar(value: str | int | float | bool | Enum) -> str | int | float | bool:
+        if isinstance(value, Enum):
+            return str(value.value)
+        return value
