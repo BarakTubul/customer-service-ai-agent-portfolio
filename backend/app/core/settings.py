@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     auth_cookie_name: str = "access_token"
     cors_origins_raw: str = "http://localhost:3000"
+    admin_api_key: str = "dev-admin-key"
 
     llm_provider: str = "mock"
     openai_api_key: str | None = None

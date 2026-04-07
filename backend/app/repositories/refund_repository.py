@@ -96,6 +96,7 @@ class RefundRepository:
         *,
         refund_request_id: str,
         to_status: str,
+        reviewer_note: str | None = None,
     ) -> RefundRequest | None:
         if to_status not in {"in_review", "resolved", "rejected"}:
             raise ValueError(f"Unsupported escalation status: {to_status}")
@@ -115,6 +116,11 @@ class RefundRepository:
         if to_status == "rejected":
             row.status = "denied"
             row.status_reason = "manual_review_rejected"
+
+        if reviewer_note:
+            suffix = reviewer_note.strip()
+            if suffix:
+                row.status_reason = f"{row.status_reason}:{suffix}" if row.status_reason else suffix
 
         self.db.add(row)
         self.db.commit()

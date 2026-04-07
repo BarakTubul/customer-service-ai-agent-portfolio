@@ -114,3 +114,56 @@ def test_guest_refund_actions_forbidden(client: TestClient, db_session: Session)
     )
     assert state_sim.status_code == 200
     assert "fulfillment_state" in state_sim.json()
+
+
+def test_admin_manual_review_queue_and_decision_flow(client: TestClient, db_session: Session) -> None:
+    customer_token = _register_and_get_token(client, "refund-customer-admin-flow@example.com")
+    customer = UserRepository(db_session).get_by_email("refund-customer-admin-flow@example.com")
+    assert customer is not None
+    OrderRepository(db_session).create(order_id="ord-ref-admin-1", user_id=customer.id)
+
+    created = client.post(
+        "/api/v1/refunds/requests",
+        json={
+            "order_id": "ord-ref-admin-1",
+            "reason_code": "fraud",
+            "simulation_scenario_id": "delivered-happy",
+        },
+        headers={"Authorization": f"Bearer {customer_token}", "Idempotency-Key": "idem-admin-1"},
+    )
+    assert created.status_code == 201
+    request_id = created.json()["refund_request_id"]
+    assert created.json()["status"] == "pending_manual_review"
+
+    admin_token = _register_and_get_token(client, "admin-reviewer@example.com")
+    admin_headers = {"Authorization": f"Bearer {admin_token}", "X-Admin-Api-Key": "dev-admin-key"}
+
+    queue = client.get("/api/v1/admin/refunds/manual-review/queue", headers=admin_headers)
+    assert queue.status_code == 200
+    queue_body = queue.json()
+    assert queue_body["total"] >= 1
+    queued_ids = [item["refund_request_id"] for item in queue_body["items"]]
+    assert request_id in queued_ids
+
+    claim = client.post(f"/api/v1/admin/refunds/requests/{request_id}/claim", headers=admin_headers)
+    assert claim.status_code == 200
+    assert claim.json()["manual_review_handoff"]["escalation_status"] == "in_review"
+
+    decision = client.post(
+        f"/api/v1/admin/refunds/requests/{request_id}/decision",
+        json={"decision": "resolved", "reviewer_note": "Approved after verification"},
+        headers=admin_headers,
+    )
+    assert decision.status_code == 200
+    assert decision.json()["status"] == "resolved"
+    assert decision.json()["manual_review_handoff"]["escalation_status"] == "resolved"
+    assert "Approved after verification" in (decision.json()["status_reason"] or "")
+
+
+def test_admin_manual_review_requires_admin_key(client: TestClient) -> None:
+    admin_token = _register_and_get_token(client, "admin-no-key@example.com")
+    response = client.get(
+        "/api/v1/admin/refunds/manual-review/queue",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 403

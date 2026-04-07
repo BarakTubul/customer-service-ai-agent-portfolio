@@ -80,6 +80,24 @@ class ManualReviewHandoff(BaseModel):
     payload: dict[str, str | int | float | bool]
 
 
+class ManualReviewQueueItem(BaseModel):
+    refund_request_id: str
+    order_id: str
+    status: str
+    created_at: datetime
+    handoff: ManualReviewHandoff
+
+
+class ManualReviewQueueResponse(BaseModel):
+    items: list[ManualReviewQueueItem]
+    total: int
+
+
+class ManualReviewDecisionRequest(BaseModel):
+    decision: str = Field(pattern="^(resolved|rejected)$")
+    reviewer_note: str | None = None
+
+
 class RefundRequestResponse(BaseModel):
     refund_request_id: str
     order_id: str

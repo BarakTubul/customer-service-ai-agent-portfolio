@@ -6,12 +6,15 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 
 from app.core.errors import ForbiddenError, NotFoundError
+from app.core.errors import ConflictError
 from app.models.user import User
 from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
 from app.services.refund_policy_engine import RefundPolicyEngine
 from app.schemas.refund import (
     ManualReviewHandoff,
+    ManualReviewQueueItem,
+    ManualReviewQueueResponse,
     MoneyAmount,
     OrderStateSimResponse,
     RefundCreateRequest,
@@ -155,15 +158,48 @@ class RefundService:
         if row.user_id != user.id:
             raise ForbiddenError("Refund request does not belong to current user")
 
-        return RefundRequestResponse(
-            refund_request_id=row.refund_request_id,
-            order_id=row.order_id,
-            status=row.status,
-            status_reason=row.status_reason,
-            manual_review_handoff=self._build_manual_review_handoff_from_row(row),
-            created_at=row.created_at,
-            idempotent_replay=False,
+        return self._build_refund_response_from_row(row)
+
+    def list_manual_review_queue(
+        self,
+        *,
+        limit: int = 50,
+        before_sla: datetime | None = None,
+    ) -> ManualReviewQueueResponse:
+        rows = self.refund_repository.list_pending_manual_review(limit=limit, before_sla=before_sla)
+        items = [self._build_manual_review_queue_item(row) for row in rows if row.escalation_status is not None]
+        return ManualReviewQueueResponse(items=items, total=len(items))
+
+    def claim_manual_review_request(self, *, refund_request_id: str) -> RefundRequestResponse:
+        row = self.refund_repository.get_by_refund_request_id(refund_request_id)
+        if row is None:
+            raise NotFoundError("Refund request not found")
+        transitioned = self.refund_repository.transition_escalation_status(
+            refund_request_id=refund_request_id,
+            to_status="in_review",
         )
+        if transitioned is None:
+            raise ConflictError("Refund request cannot be claimed in current state")
+        return self._build_refund_response_from_row(transitioned)
+
+    def decide_manual_review_request(
+        self,
+        *,
+        refund_request_id: str,
+        decision: str,
+        reviewer_note: str | None,
+    ) -> RefundRequestResponse:
+        row = self.refund_repository.get_by_refund_request_id(refund_request_id)
+        if row is None:
+            raise NotFoundError("Refund request not found")
+        transitioned = self.refund_repository.transition_escalation_status(
+            refund_request_id=refund_request_id,
+            to_status=decision,
+            reviewer_note=reviewer_note,
+        )
+        if transitioned is None:
+            raise ConflictError("Refund request cannot be decided in current state")
+        return self._build_refund_response_from_row(transitioned)
 
     def get_order_state_sim(self, *, user: User, order_id: str, scenario_id: str) -> OrderStateSimResponse:
         order = self._get_owned_order(user=user, order_id=order_id)
@@ -267,6 +303,29 @@ class RefundService:
             queue_name=row.escalation_queue_name,
             sla_deadline_at=row.escalation_sla_deadline_at,
             payload=payload,
+        )
+
+    def _build_manual_review_queue_item(self, row) -> ManualReviewQueueItem:
+        handoff = self._build_manual_review_handoff_from_row(row)
+        if handoff is None:
+            raise ValueError("Expected manual-review handoff data")
+        return ManualReviewQueueItem(
+            refund_request_id=row.refund_request_id,
+            order_id=row.order_id,
+            status=row.status,
+            created_at=row.created_at,
+            handoff=handoff,
+        )
+
+    def _build_refund_response_from_row(self, row) -> RefundRequestResponse:
+        return RefundRequestResponse(
+            refund_request_id=row.refund_request_id,
+            order_id=row.order_id,
+            status=row.status,
+            status_reason=row.status_reason,
+            manual_review_handoff=self._build_manual_review_handoff_from_row(row),
+            created_at=row.created_at,
+            idempotent_replay=False,
         )
 
     @staticmethod
