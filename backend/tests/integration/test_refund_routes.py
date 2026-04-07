@@ -114,3 +114,69 @@ def test_guest_refund_actions_forbidden(client: TestClient, db_session: Session)
     )
     assert state_sim.status_code == 200
     assert "fulfillment_state" in state_sim.json()
+
+
+def test_manual_review_escalation_contract_in_refund_routes(client: TestClient, db_session: Session) -> None:
+    token = _register_and_get_token(client, "refund-manual-review@example.com")
+    user_repo = UserRepository(db_session)
+    owner = user_repo.get_by_email("refund-manual-review@example.com")
+    assert owner is not None
+    OrderRepository(db_session).create(order_id="ord-ref-4", user_id=owner.id)
+
+    eligibility = client.post(
+        "/api/v1/refunds/eligibility/check",
+        json={
+            "order_id": "ord-ref-4",
+            "reason_code": "fraud",
+            "simulation_scenario_id": "delivered-happy",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert eligibility.status_code == 200
+    eligibility_body = eligibility.json()
+    assert eligibility_body["eligible"] is False
+    assert eligibility_body["resolution_action"] == "manual_review"
+
+    created = client.post(
+        "/api/v1/refunds/requests",
+        json={
+            "order_id": "ord-ref-4",
+            "reason_code": "fraud",
+            "simulation_scenario_id": "delivered-happy",
+        },
+        headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "idem-ref-manual-1"},
+    )
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["status"] == "pending_manual_review"
+    assert created_body["manual_review_handoff"] is not None
+    assert created_body["manual_review_handoff"]["escalation_status"] == "queued"
+    assert created_body["manual_review_handoff"]["queue_name"] == "refund-risk-review"
+    assert created_body["manual_review_handoff"]["payload"]["reason_code"] == "fraud"
+    assert created_body["manual_review_handoff"]["payload"]["resolution_action"] == "manual_review"
+
+    replay = client.post(
+        "/api/v1/refunds/requests",
+        json={
+            "order_id": "ord-ref-4",
+            "reason_code": "fraud",
+            "simulation_scenario_id": "delivered-happy",
+        },
+        headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "idem-ref-manual-1"},
+    )
+    assert replay.status_code == 200
+    replay_body = replay.json()
+    assert replay_body["idempotent_replay"] is True
+    assert replay_body["status"] == "pending_manual_review"
+    assert replay_body["manual_review_handoff"]["queue_name"] == "refund-risk-review"
+
+    request_id = created_body["refund_request_id"]
+    fetched = client.get(
+        f"/api/v1/refunds/requests/{request_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["status"] == "pending_manual_review"
+    assert fetched_body["manual_review_handoff"] is not None
+    assert fetched_body["manual_review_handoff"]["payload"]["order_id"] == "ord-ref-4"
