@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.dependencies import get_account_order_service, get_current_user
+from app.api.dependencies import get_account_order_service, get_current_user, get_current_user_from_cookie
 from app.models.user import User
 from app.schemas.account import (
     AccountMeResponse,
@@ -19,7 +19,7 @@ router = APIRouter()
 
 @router.get("/auth/session", response_model=SessionStateResponse)
 def get_auth_session(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_from_cookie),
     account_order_service: AccountOrderService = Depends(get_account_order_service),
 ) -> SessionStateResponse:
     return account_order_service.get_session_state(current_user)

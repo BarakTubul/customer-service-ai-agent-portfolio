@@ -23,3 +23,20 @@ def test_expired_auth_cookie_is_rejected() -> None:
     payload = response.json()
     assert payload["error"]["code"] == "unauthorized"
     assert payload["error"]["message"] == "Invalid or expired token"
+
+
+def test_session_endpoint_requires_cookie_even_with_valid_bearer() -> None:
+    client = TestClient(app)
+    valid_token = create_access_token(
+        "1",
+        is_guest=False,
+    )
+
+    response = client.get(
+        "/api/v1/auth/session",
+        headers={"Authorization": f"Bearer {valid_token}"},
+    )
+
+    assert response.status_code == 401
+    payload = response.json()
+    assert payload["error"]["code"] == "unauthorized"

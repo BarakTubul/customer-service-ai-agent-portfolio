@@ -129,12 +129,37 @@ def _extract_token_from_request(
     raise UnauthorizedError("Missing authentication token")
 
 
+def _extract_cookie_token_from_request(request: Request) -> str:
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        return cookie_token
+
+    raise UnauthorizedError("Missing authentication token")
+
+
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     user_repository: UserRepository = Depends(get_user_repository),
 ) -> User:
     token = _extract_token_from_request(request, credentials)
+    payload = decode_access_token(token)
+
+    subject = payload.get("sub")
+    if subject is None:
+        raise UnauthorizedError("Invalid token subject")
+
+    user = user_repository.get_by_id(int(subject))
+    if user is None:
+        raise UnauthorizedError("User not found")
+    return user
+
+
+def get_current_user_from_cookie(
+    request: Request,
+    user_repository: UserRepository = Depends(get_user_repository),
+) -> User:
+    token = _extract_cookie_token_from_request(request)
     payload = decode_access_token(token)
 
     subject = payload.get("sub")

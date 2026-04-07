@@ -98,6 +98,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [location.pathname, navigate]);
 
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    let inFlight = false;
+
+    const checkSession = async () => {
+      if (inFlight) {
+        return;
+      }
+
+      inFlight = true;
+      try {
+        await hydrateCurrentUser();
+      } catch (err) {
+        console.error('[auth] session check failed', err);
+        setUser(null);
+        sessionStorage.setItem('session_expired', '1');
+        if (!['/login', '/register', '/guest'].includes(window.location.pathname)) {
+          navigate('/login', { replace: true });
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void checkSession();
+    }, 15000);
+
+    const handleFocus = () => {
+      void checkSession();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void checkSession();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [user, navigate]);
+
   const login = async (email: string, password: string) => {
     try {
       await apiClient.login(email, password);
