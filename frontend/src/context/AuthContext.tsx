@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import * as t from '@/types';
 import { apiClient } from '@/services/apiClient';
 
@@ -57,6 +58,8 @@ async function hydrateCurrentUser(): Promise<t.User | null> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<t.User | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [sessionId] = useState<string>(() => {
     const stored = localStorage.getItem('session_id');
     return stored || `session_${Date.now()}`;
@@ -84,6 +87,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => {
+    return apiClient.onUnauthorized(() => {
+      setUser(null);
+      sessionStorage.setItem('session_expired', '1');
+      if (!['/login', '/register', '/guest'].includes(location.pathname)) {
+        navigate('/login', { replace: true });
+      }
+    });
+  }, [location.pathname, navigate]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -120,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     console.debug('[auth] logout');
+    sessionStorage.removeItem('session_expired');
     apiClient.logout().catch((err) => {
       console.error('[auth] logout request failed', err);
     });

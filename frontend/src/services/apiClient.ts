@@ -58,6 +58,7 @@ function formatAxiosError(error: unknown): string {
 class APIClient {
   private client: AxiosInstance;
   private accessToken: string | null;
+  private unauthorizedHandlers: Array<() => void> = [];
 
   constructor() {
     this.accessToken = sessionStorage.getItem('access_token');
@@ -94,6 +95,10 @@ class APIClient {
       (error) => {
         const formatted = formatAxiosError(error);
         if (axios.isAxiosError(error)) {
+          if (error.response?.status === 401 && this.accessToken) {
+            this.setAccessToken(null);
+            this.unauthorizedHandlers.forEach((handler) => handler());
+          }
           console.error('[api] axios error', {
             message: error.message,
             method: (error.config?.method || 'GET').toUpperCase(),
@@ -121,6 +126,13 @@ class APIClient {
 
   getAccessToken(): string | null {
     return this.accessToken;
+  }
+
+  onUnauthorized(handler: () => void): () => void {
+    this.unauthorizedHandlers.push(handler);
+    return () => {
+      this.unauthorizedHandlers = this.unauthorizedHandlers.filter((item) => item !== handler);
+    };
   }
 
   // Auth endpoints

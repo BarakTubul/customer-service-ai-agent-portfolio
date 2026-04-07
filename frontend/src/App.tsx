@@ -16,7 +16,7 @@ import { RefundPage } from '@/pages/RefundPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <>{children}</> : <Navigate to="/" />;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 }
 
 function AppRoutes() {
