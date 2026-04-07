@@ -11,10 +11,11 @@ export function Header() {
   const location = useLocation();
   const [notifications, setNotifications] = useState<t.LiveNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
   const seenNotificationIds = useRef(new Set<string>());
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
   const navItems = [
-    { label: 'Dashboard', path: '/dashboard' },
     { label: 'My Orders', path: '/orders' },
     { label: 'Chat', path: '/chat' },
     { label: 'Order', path: '/order' },
@@ -25,6 +26,7 @@ export function Header() {
     if (!user || isGuest) {
       setNotifications([]);
       setShowNotifications(false);
+      setShowAccountMenu(false);
       seenNotificationIds.current.clear();
       return;
     }
@@ -73,6 +75,17 @@ export function Header() {
       socket.close();
     };
   }, [user, isGuest]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setShowAccountMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => document.removeEventListener('mousedown', handleDocumentClick);
+  }, []);
 
   return (
     <header className="sticky top-0 z-20 border-b border-cyan-100 bg-white/80 shadow-sm backdrop-blur">
@@ -159,15 +172,49 @@ export function Header() {
                   </div>
                 )}
               </div>
-              <div className="text-right px-3 py-1.5 rounded-xl border border-gray-200 bg-white/70">
-                <p className="text-sm font-semibold text-gray-900">{user.email}</p>
-                <p className="text-xs text-gray-500 font-medium">
-                  {isGuest ? 'Guest' : user.is_verified ? 'Verified' : 'Pending'}
-                </p>
+              <div className="relative" ref={accountMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowAccountMenu((current) => !current)}
+                  className="text-right px-3 py-1.5 rounded-xl border border-gray-200 bg-white/70 hover:bg-white transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-gray-900">{user.email}</p>
+                      <p className="text-xs text-gray-500 font-medium">
+                        {isGuest ? 'Guest' : user.is_verified ? 'Verified' : 'Pending'}
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-400 font-bold leading-none">▼</span>
+                  </div>
+                </button>
+
+                {showAccountMenu && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-xl border border-gray-200 bg-white shadow-lg p-2">
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      onClick={() => {
+                        navigate('/dashboard');
+                        setShowAccountMenu(false);
+                      }}
+                    >
+                      Profile
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50"
+                      onClick={() => {
+                        setShowAccountMenu(false);
+                        logout();
+                        navigate('/');
+                      }}
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
               </div>
-              <Button onClick={() => { logout(); navigate('/'); }} variant="outline" size="sm">
-                Logout
-              </Button>
             </>
           )}
         </div>
