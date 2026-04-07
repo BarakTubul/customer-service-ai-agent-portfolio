@@ -7,6 +7,7 @@ from app.core.errors import ForbiddenError, NotFoundError
 from app.models.user import User
 from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
+from app.services.refund_policy_engine import RefundPolicyEngine
 from app.schemas.refund import (
     MoneyAmount,
     OrderStateSimResponse,
@@ -21,37 +22,26 @@ class RefundService:
     def __init__(self, order_repository: OrderRepository, refund_repository: RefundRepository) -> None:
         self.order_repository = order_repository
         self.refund_repository = refund_repository
+        self.policy_engine = RefundPolicyEngine()
 
     def check_eligibility(self, *, user: User, payload: RefundEligibilityCheckRequest) -> RefundEligibilityCheckResponse:
         order = self._get_owned_order(user=user, order_id=payload.order_id)
         simulated_state = self._simulate_order_state(order_id=order.order_id, scenario_id=payload.simulation_scenario_id)
 
-        decision_reason_codes: list[str] = []
-        eligible = True
-
-        if payload.simulation_scenario_id in {"expired-window", "non-refundable"}:
-            eligible = False
-            decision_reason_codes.append("refund_window_expired")
-
-        if payload.reason_code in {"fraud", "abuse"}:
-            eligible = False
-            decision_reason_codes.append("manual_review_required")
-
-        if not decision_reason_codes:
-            decision_reason_codes.append("eligible")
-
-        amount = 0.0 if not eligible else 12.5
-        if simulated_state["payment_state"] == "pending":
-            amount = 0.0
-            eligible = False
-            if "payment_not_captured" not in decision_reason_codes:
-                decision_reason_codes.append("payment_not_captured")
+        decision = self.policy_engine.evaluate(
+            reason_code=payload.reason_code,
+            simulation_scenario_id=payload.simulation_scenario_id,
+            fulfillment_state=simulated_state["fulfillment_state"],
+            payment_state=simulated_state["payment_state"],
+        )
 
         return RefundEligibilityCheckResponse(
-            eligible=eligible,
-            decision_reason_codes=decision_reason_codes,
-            policy_reference="refund-policy-v1",
-            refundable_amount=MoneyAmount(currency="USD", value=amount),
+            eligible=decision.eligible,
+            resolution_action=decision.resolution_action,
+            decision_reason_codes=decision.decision_reason_codes,
+            policy_version=decision.policy_version,
+            policy_reference=decision.policy_reference,
+            refundable_amount=MoneyAmount(currency="USD", value=decision.refundable_amount_value),
             simulated_state=simulated_state["fulfillment_state"],
         )
 
@@ -170,6 +160,8 @@ class RefundService:
     def _simulate_order_state(*, order_id: str, scenario_id: str) -> dict[str, str]:
         key = hashlib.sha256(f"{order_id}:{scenario_id}".encode("utf-8")).hexdigest()
         bucket = int(key[:2], 16) % 3
+        if scenario_id == "delivered-happy":
+            return {"fulfillment_state": "delivered", "payment_state": "captured"}
         if scenario_id == "payment-pending":
             return {"fulfillment_state": "delivered", "payment_state": "pending"}
         if scenario_id == "expired-window":

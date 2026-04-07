@@ -9,7 +9,14 @@ from app.models.user import User
 from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
 from app.services.refund_service import RefundService
-from app.schemas.refund import RefundCreateRequest, RefundEligibilityCheckRequest
+from app.schemas.refund import (
+    RefundCreateRequest,
+    RefundDecisionReasonCode,
+    RefundEligibilityCheckRequest,
+    RefundPolicyVersion,
+    RefundReasonCode,
+    RefundResolutionAction,
+)
 
 
 TEST_DATABASE_URL = "sqlite+pysqlite:///:memory:"
@@ -42,13 +49,40 @@ def test_eligibility_ineligible_for_expired_window() -> None:
             user=user,
             payload=RefundEligibilityCheckRequest(
                 order_id="ord-r-1",
-                reason_code="late_delivery",
+                reason_code=RefundReasonCode.LATE_DELIVERY,
                 simulation_scenario_id="expired-window",
             ),
         )
 
         assert response.eligible is False
-        assert "refund_window_expired" in response.decision_reason_codes
+        assert response.resolution_action == RefundResolutionAction.DENY
+        assert RefundDecisionReasonCode.REFUND_WINDOW_EXPIRED in response.decision_reason_codes
+        assert response.policy_version == RefundPolicyVersion.V1
+    finally:
+        session.close()
+
+
+def test_eligibility_partial_for_missing_item() -> None:
+    session = build_session()
+    try:
+        user = _create_user(session)
+        order_repo = OrderRepository(session)
+        order_repo.create(order_id="ord-r-4", user_id=user.id)
+
+        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        response = service.check_eligibility(
+            user=user,
+            payload=RefundEligibilityCheckRequest(
+                order_id="ord-r-4",
+                reason_code=RefundReasonCode.MISSING_ITEM,
+                simulation_scenario_id="delivered-happy",
+            ),
+        )
+
+        assert response.eligible is True
+        assert response.resolution_action == RefundResolutionAction.APPROVE_PARTIAL
+        assert response.decision_reason_codes == [RefundDecisionReasonCode.ELIGIBLE_PARTIAL]
+        assert response.refundable_amount.value == 8.0
     finally:
         session.close()
 
@@ -61,7 +95,11 @@ def test_create_request_idempotent_replay() -> None:
         order_repo.create(order_id="ord-r-2", user_id=user.id)
         service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
 
-        payload = RefundCreateRequest(order_id="ord-r-2", reason_code="missing_item", simulation_scenario_id="default")
+        payload = RefundCreateRequest(
+            order_id="ord-r-2",
+            reason_code=RefundReasonCode.MISSING_ITEM,
+            simulation_scenario_id="default",
+        )
         first = service.create_request(user=user, payload=payload, idempotency_key="idem-1")
         second = service.create_request(user=user, payload=payload, idempotency_key="idem-1")
 
@@ -86,7 +124,7 @@ def test_guest_cannot_submit_refund() -> None:
                 user=guest,
                 payload=RefundEligibilityCheckRequest(
                     order_id="ord-r-3",
-                    reason_code="late_delivery",
+                    reason_code=RefundReasonCode.LATE_DELIVERY,
                     simulation_scenario_id="default",
                 ),
             )
