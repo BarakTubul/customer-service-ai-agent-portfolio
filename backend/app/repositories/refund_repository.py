@@ -29,6 +29,14 @@ class RefundRepository:
         simulation_scenario_id: str,
         status: str,
         status_reason: str | None,
+        policy_version: str | None = None,
+        policy_reference: str | None = None,
+        resolution_action: str | None = None,
+        decision_reason_codes: str | None = None,
+        refundable_amount_currency: str | None = None,
+        refundable_amount_value: float | None = None,
+        explanation_template_key: str | None = None,
+        explanation_params_json: str | None = None,
     ) -> RefundRequest:
         row = RefundRequest(
             refund_request_id=refund_request_id,
@@ -39,6 +47,14 @@ class RefundRepository:
             simulation_scenario_id=simulation_scenario_id,
             status=status,
             status_reason=status_reason,
+            policy_version=policy_version,
+            policy_reference=policy_reference,
+            resolution_action=resolution_action,
+            decision_reason_codes=decision_reason_codes,
+            refundable_amount_currency=refundable_amount_currency,
+            refundable_amount_value=refundable_amount_value,
+            explanation_template_key=explanation_template_key,
+            explanation_params_json=explanation_params_json,
         )
         self.db.add(row)
         self.db.commit()

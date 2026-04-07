@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, timedelta
+from enum import Enum
 
 from app.core.errors import ForbiddenError, NotFoundError
 from app.models.user import User
@@ -98,6 +100,18 @@ class RefundService:
             simulation_scenario_id=payload.simulation_scenario_id,
             status=status,
             status_reason=status_reason,
+            policy_version=eligibility.policy_version,
+            policy_reference=eligibility.policy_reference,
+            resolution_action=eligibility.resolution_action,
+            decision_reason_codes=",".join(eligibility.decision_reason_codes),
+            refundable_amount_currency=eligibility.refundable_amount.currency,
+            refundable_amount_value=eligibility.refundable_amount.value,
+            explanation_template_key=eligibility.explanation_template_key,
+            explanation_params_json=json.dumps(
+                self._serialize_explanation_params(eligibility.explanation_params),
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
         )
 
         return RefundRequestResponse(
@@ -173,3 +187,13 @@ class RefundService:
         if bucket == 1:
             return {"fulfillment_state": "in_transit", "payment_state": "captured"}
         return {"fulfillment_state": "preparing", "payment_state": "authorized"}
+
+    @staticmethod
+    def _serialize_explanation_params(params: dict[str, str | int | float | bool]) -> dict[str, str | int | float | bool]:
+        serialized: dict[str, str | int | float | bool] = {}
+        for key, value in params.items():
+            if isinstance(value, Enum):
+                serialized[key] = str(value.value)
+            else:
+                serialized[key] = value
+        return serialized

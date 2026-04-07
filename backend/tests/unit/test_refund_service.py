@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -110,6 +112,19 @@ def test_create_request_idempotent_replay() -> None:
         assert first.refund_request_id == second.refund_request_id
         assert first.idempotent_replay is False
         assert second.idempotent_replay is True
+
+        stored = service.refund_repository.get_by_refund_request_id(first.refund_request_id)
+        assert stored is not None
+        assert stored.policy_version == RefundPolicyVersion.V1
+        assert stored.policy_reference == "refund-policy-v1"
+        assert stored.resolution_action == RefundResolutionAction.APPROVE_PARTIAL
+        assert stored.decision_reason_codes == RefundDecisionReasonCode.ELIGIBLE_PARTIAL
+        assert stored.refundable_amount_currency == "USD"
+        assert stored.refundable_amount_value == 8.0
+        assert stored.explanation_template_key == "refund.reason_policy_outcome"
+        explanation_params = json.loads(stored.explanation_params_json or "{}")
+        assert explanation_params["submitted_reason"] == RefundReasonCode.MISSING_ITEM
+        assert explanation_params["resolution_action"] == RefundResolutionAction.APPROVE_PARTIAL
     finally:
         session.close()
 
