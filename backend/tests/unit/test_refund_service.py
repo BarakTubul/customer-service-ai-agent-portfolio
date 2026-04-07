@@ -152,3 +152,44 @@ def test_guest_cannot_submit_refund() -> None:
             assert True
     finally:
         session.close()
+
+
+def test_create_request_manual_review_emits_handoff_contract() -> None:
+    session = build_session()
+    try:
+        user = _create_user(session)
+        order_repo = OrderRepository(session)
+        order_repo.create(order_id="ord-r-5", user_id=user.id)
+        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+
+        response = service.create_request(
+            user=user,
+            payload=RefundCreateRequest(
+                order_id="ord-r-5",
+                reason_code=RefundReasonCode.FRAUD,
+                simulation_scenario_id="default",
+            ),
+            idempotency_key="idem-manual-review-1",
+        )
+
+        assert response.status == "pending_manual_review"
+        assert response.manual_review_handoff is not None
+        assert response.manual_review_handoff.escalation_status == "queued"
+        assert response.manual_review_handoff.queue_name == "refund-risk-review"
+        assert response.manual_review_handoff.payload["reason_code"] == RefundReasonCode.FRAUD.value
+        assert response.manual_review_handoff.payload["resolution_action"] == RefundResolutionAction.MANUAL_REVIEW.value
+
+        replay = service.create_request(
+            user=user,
+            payload=RefundCreateRequest(
+                order_id="ord-r-5",
+                reason_code=RefundReasonCode.FRAUD,
+                simulation_scenario_id="default",
+            ),
+            idempotency_key="idem-manual-review-1",
+        )
+        assert replay.idempotent_replay is True
+        assert replay.manual_review_handoff is not None
+        assert replay.manual_review_handoff.escalation_status == "queued"
+    finally:
+        session.close()

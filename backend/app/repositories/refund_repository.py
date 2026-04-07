@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -37,6 +39,10 @@ class RefundRepository:
         refundable_amount_value: float | None = None,
         explanation_template_key: str | None = None,
         explanation_params_json: str | None = None,
+        escalation_status: str | None = None,
+        escalation_queue_name: str | None = None,
+        escalation_sla_deadline_at: datetime | None = None,
+        escalation_payload_json: str | None = None,
     ) -> RefundRequest:
         row = RefundRequest(
             refund_request_id=refund_request_id,
@@ -55,6 +61,10 @@ class RefundRepository:
             refundable_amount_value=refundable_amount_value,
             explanation_template_key=explanation_template_key,
             explanation_params_json=explanation_params_json,
+            escalation_status=escalation_status,
+            escalation_queue_name=escalation_queue_name,
+            escalation_sla_deadline_at=escalation_sla_deadline_at,
+            escalation_payload_json=escalation_payload_json,
         )
         self.db.add(row)
         self.db.commit()

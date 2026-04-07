@@ -73,12 +73,19 @@ class RefundCreateRequest(BaseModel):
     item_selections: list[ItemSelection] = []
     simulation_scenario_id: str = "default"
 
+class ManualReviewHandoff(BaseModel):
+    escalation_status: str
+    queue_name: str
+    sla_deadline_at: datetime
+    payload: dict[str, str | int | float | bool]
+
 
 class RefundRequestResponse(BaseModel):
     refund_request_id: str
     order_id: str
     status: str
     status_reason: str | None
+    manual_review_handoff: ManualReviewHandoff | None = None
     created_at: datetime
     idempotent_replay: bool = False
 
