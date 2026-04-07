@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 
-from app.api.dependencies import get_current_user, get_refund_service
+from app.api.dependencies import get_current_user, get_refund_service, require_admin_user
 from app.models.user import User
 from app.schemas.refund import (
+    ManualReviewDecisionRequest,
+    ManualReviewQueueResponse,
     OrderStateSimResponse,
     RefundCreateRequest,
     RefundEligibilityCheckRequest,
@@ -60,3 +64,39 @@ def get_order_state_sim(
     refund_service: RefundService = Depends(get_refund_service),
 ) -> OrderStateSimResponse:
     return refund_service.get_order_state_sim(user=current_user, order_id=order_id, scenario_id=scenario_id)
+
+
+@router.get("/admin/refunds/manual-review/queue", response_model=ManualReviewQueueResponse)
+def list_manual_review_queue(
+    limit: int = Query(default=50, ge=1, le=500),
+    before_sla: datetime | None = Query(default=None),
+    admin_user: User = Depends(require_admin_user),
+    refund_service: RefundService = Depends(get_refund_service),
+) -> ManualReviewQueueResponse:
+    _ = admin_user
+    return refund_service.list_manual_review_queue(limit=limit, before_sla=before_sla)
+
+
+@router.post("/admin/refunds/requests/{refund_request_id}/claim", response_model=RefundRequestResponse)
+def claim_manual_review_request(
+    refund_request_id: str,
+    admin_user: User = Depends(require_admin_user),
+    refund_service: RefundService = Depends(get_refund_service),
+) -> RefundRequestResponse:
+    _ = admin_user
+    return refund_service.claim_manual_review_request(refund_request_id=refund_request_id)
+
+
+@router.post("/admin/refunds/requests/{refund_request_id}/decision", response_model=RefundRequestResponse)
+def decide_manual_review_request(
+    refund_request_id: str,
+    payload: ManualReviewDecisionRequest,
+    admin_user: User = Depends(require_admin_user),
+    refund_service: RefundService = Depends(get_refund_service),
+) -> RefundRequestResponse:
+    _ = admin_user
+    return refund_service.decide_manual_review_request(
+        refund_request_id=refund_request_id,
+        decision=payload.decision,
+        reviewer_note=payload.reviewer_note,
+    )

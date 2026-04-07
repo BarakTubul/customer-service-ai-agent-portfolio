@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from fastapi import Depends, Request
+from fastapi import Depends, Header, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.ai.providers.mock_provider import MockLLMProvider
 from app.ai.providers.openai_provider import OpenAILLMProvider
 from app.core.settings import get_settings
 from app.core.errors import UnauthorizedError
+from app.core.errors import ForbiddenError
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -175,4 +176,16 @@ def get_current_user_from_cookie(
 def get_current_guest_user(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_guest:
         raise UnauthorizedError("Guest account required")
+    return current_user
+
+
+def require_admin_user(
+    current_user: User = Depends(get_current_user),
+    admin_api_key: str | None = Header(default=None, alias="X-Admin-Api-Key"),
+) -> User:
+    settings = get_settings()
+    if admin_api_key is None or admin_api_key != settings.admin_api_key:
+        raise ForbiddenError("Admin access required")
+    if current_user.is_guest:
+        raise ForbiddenError("Admin access requires a registered account")
     return current_user
