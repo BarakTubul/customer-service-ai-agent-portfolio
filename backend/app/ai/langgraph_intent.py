@@ -49,11 +49,28 @@ class HybridIntentGraph:
 
     def _rule_classify_node(self, state: IntentGraphState) -> IntentGraphState:
         normalized = state["message_text"].lower()
+        compact = " ".join(normalized.split())
+
+        if compact in {"hi", "hello", "hey", "good morning", "good afternoon", "good evening", "shalom"}:
+            state["intent"] = "general_support"
+            state["confidence"] = 0.98
+            state["reason"] = "rule_greeting_smalltalk"
+            return state
 
         if any(token in normalized for token in ["refund", "money back", "reimburse"]):
+            if any(phrase in normalized for phrase in ["request a refund", "ask for refund", "get a refund", "where can i ask for refund", "where can i request a refund"]):
+                state["intent"] = "refund_request"
+                state["confidence"] = 0.95
+                state["reason"] = "rule_refund_request_keywords"
+                return state
             state["intent"] = "refund_policy"
             state["confidence"] = 0.9
             state["reason"] = "rule_refund_keywords"
+            return state
+        if any(phrase in normalized for phrase in ["order food", "place an order", "place order", "how do i order", "where can i order", "where can i order food"]):
+            state["intent"] = "order_placement"
+            state["confidence"] = 0.94
+            state["reason"] = "rule_order_placement_keywords"
             return state
         if any(token in normalized for token in ["where is my order", "order", "delivery"]):
             state["intent"] = "order_status"

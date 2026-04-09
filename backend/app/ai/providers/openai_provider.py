@@ -8,7 +8,10 @@ from app.ai.providers.base import IntentClassification
 
 class _IntentClassificationResult(BaseModel):
     intent: str = Field(
-        description="Intent label. Prefer one of: refund_policy, order_status, account_verification, general_support"
+        description=(
+            "Intent label. Prefer one of: refund_request, refund_policy, order_placement, "
+            "order_status, account_verification, general_support"
+        )
     )
     confidence: float = Field(description="Confidence score between 0 and 1")
     reason: str = Field(description="Short rationale")
