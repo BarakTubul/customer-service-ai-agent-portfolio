@@ -29,6 +29,10 @@ dev = [
   "pytest-cov>=5.0.0",
   "debugpy>=1.8.0",
 ]
+ragas = [
+  "ragas>=0.1.0",
+  "datasets>=2.18.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

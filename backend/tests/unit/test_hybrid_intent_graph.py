@@ -12,7 +12,15 @@ class FakeLLMProvider:
         self.calls += 1
         return IntentClassification(intent="general_support", confidence=0.77, reason="fake_llm")
 
-    def synthesize_faq_answer(self, *, question: str, base_answer: str, source_label: str) -> str:
+    def synthesize_faq_answer(
+        self,
+        *,
+        question: str,
+        base_answer: str,
+        source_label: str,
+        faq_context: str | None = None,
+        conversation_context: str | None = None,
+    ) -> str:
         return base_answer
 
 

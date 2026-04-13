@@ -45,7 +45,17 @@ class OpenAILLMProvider:
         confidence = max(0.0, min(1.0, result.confidence))
         return IntentClassification(intent=result.intent, confidence=confidence, reason=result.reason)
 
-    def synthesize_faq_answer(self, *, question: str, base_answer: str, source_label: str) -> str:
+    def synthesize_faq_answer(
+        self,
+        *,
+        question: str,
+        base_answer: str,
+        source_label: str,
+        faq_context: str | None = None,
+        conversation_context: str | None = None,
+    ) -> str:
+        context_block = faq_context.strip() if faq_context else base_answer
+        history_block = conversation_context.strip() if conversation_context else "No prior messages"
         structured = self.model.with_structured_output(_FAQSynthesisResult)
         result = structured.invoke(
             [
@@ -53,15 +63,19 @@ class OpenAILLMProvider:
                     "role": "system",
                     "content": (
                         "Rewrite support answers to be concise, clear, and policy-safe."
-                        "Do not invent facts beyond the provided base answer."
+                        "Use prior conversation only to resolve user references."
+                        "Use only the provided FAQ context and do not invent facts."
+                        "If the context is incomplete, respond conservatively and say so."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
                         f"Question: {question}\n"
+                        f"Conversation context:\n{history_block}\n"
                         f"Source label: {source_label}\n"
-                        f"Base answer: {base_answer}"
+                        f"Base answer: {base_answer}\n"
+                        f"FAQ context:\n{context_block}"
                     ),
                 },
             ]
