@@ -576,3 +576,83 @@ def test_escalation_follow_up_confirmation_keeps_handoff_prompt() -> None:
         session.close()
 
 
+def test_direct_human_request_uses_clarify_handoff() -> None:
+    session = build_session()
+    try:
+        provider = FakeLLMProvider()
+        service = IntentFAQService(
+            faq_repository=FAQRepository(),
+            conversation_repository=ConversationRepository(session),
+            llm_provider=provider,
+            intent_graph=HybridIntentGraph(llm_provider=provider),
+            escalation_confidence_threshold=0.6,
+            llm_faq_synthesis_enabled=True,
+            retrieval_top_k=10,
+            max_context_chunks=5,
+            max_context_chars=2200,
+            min_chunk_score=0.10,
+            relative_score_floor=0.60,
+            synthesis_history_messages=6,
+            synthesis_history_chars=1200,
+            refund_repository=RefundRepository(session),
+        )
+
+        user = User(is_guest=True, is_active=True, is_verified=False)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        response = service.resolve_intent(
+            user=user,
+            session_id="sess-direct-human",
+            message_text="I would like to speak to a human please",
+            message_id="msg-direct-human",
+        )
+
+        assert response.route == "clarify"
+        assert response.clarification_question is not None
+        assert "manager review flow" in response.clarification_question.lower()
+    finally:
+        session.close()
+
+
+def test_need_assistance_now_uses_clarify_handoff() -> None:
+    session = build_session()
+    try:
+        provider = FakeLLMProvider()
+        service = IntentFAQService(
+            faq_repository=FAQRepository(),
+            conversation_repository=ConversationRepository(session),
+            llm_provider=provider,
+            intent_graph=HybridIntentGraph(llm_provider=provider),
+            escalation_confidence_threshold=0.6,
+            llm_faq_synthesis_enabled=True,
+            retrieval_top_k=10,
+            max_context_chunks=5,
+            max_context_chars=2200,
+            min_chunk_score=0.10,
+            relative_score_floor=0.60,
+            synthesis_history_messages=6,
+            synthesis_history_chars=1200,
+            refund_repository=RefundRepository(session),
+        )
+
+        user = User(is_guest=True, is_active=True, is_verified=False)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        response = service.resolve_intent(
+            user=user,
+            session_id="sess-assistance-now",
+            message_text="i need assistance now",
+            message_id="msg-assistance-now",
+        )
+
+        assert response.route == "clarify"
+        assert response.clarification_question is not None
+        assert "share your order id" in response.clarification_question.lower()
+    finally:
+        session.close()
+
+

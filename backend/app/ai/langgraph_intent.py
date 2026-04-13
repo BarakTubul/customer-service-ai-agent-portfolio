@@ -68,6 +68,8 @@ class HybridIntentGraph:
                 "talk to human",
                 "speak with a human",
                 "speak to a human",
+                "need assistance",
+                "assistance now",
                 "real person",
                 "live agent",
                 "manager",

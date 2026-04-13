@@ -112,7 +112,7 @@ class IntentFAQService:
         normalized = query_text.strip().lower()
         return bool(
             re.search(
-                r"\b(human\s+help|human\s+support|human\s+assistance|human\s+agent|real\s+person|live\s+agent|talk\s+to\s+(a\s+)?person|speak\s+(to|with)\s+(a\s+)?human|manager|escalat(e|ion|ing)?)\b",
+                r"\b(human\s+help|human\s+support|human\s+assistance|human\s+agent|real\s+person|live\s+agent|talk\s+to\s+(a\s+)?person|speak\s+(to|with)\s+(a\s+)?human|need\s+assistance|assistance\s+now|manager|escalat(e|ion|ing)?)\b",
                 normalized,
             )
         )
@@ -299,6 +299,23 @@ class IntentFAQService:
         return "\n".join(sections)
 
     def resolve_intent(self, *, user: User, session_id: str, message_text: str, message_id: str) -> IntentResolveResponse:
+        if self._is_human_escalation_request(message_text):
+            trace_id = hashlib.sha256(f"{session_id}:{message_id}:general_support".encode("utf-8")).hexdigest()[:16]
+            self.conversation_repository.add_message(
+                session_id=session_id,
+                user_id=user.id,
+                role="user",
+                text=message_text,
+            )
+            return IntentResolveResponse(
+                intent="general_support",
+                confidence=0.99,
+                requires_clarification=True,
+                clarification_question=self._build_human_handoff_reply(),
+                route="clarify",
+                trace_id=trace_id,
+            )
+
         if self._has_pending_handoff_prompt(session_id=session_id) and self._is_escalation_follow_up_confirmation(
             message_text
         ):
@@ -409,7 +426,7 @@ class IntentFAQService:
             )
             return FAQSearchResponse(answer=answer, citations=[], retrieval_mode="handoff_intake")
 
-        if intent == "general_support" and self._is_human_escalation_request(query_text):
+        if self._is_human_escalation_request(query_text):
             answer = FAQAnswer(
                 text=self._build_human_handoff_reply(),
                 confidence=0.95,
