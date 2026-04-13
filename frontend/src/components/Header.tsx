@@ -16,7 +16,7 @@ export function Header() {
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
   const navItems = user?.is_admin
-    ? [{ label: 'Refund Reviews', path: '/admin/refunds' }]
+    ? [{ label: 'Manager Reviews', path: '/manager/refunds' }]
     : [
         { label: 'My Orders', path: '/orders' },
         { label: 'Order', path: '/order' },

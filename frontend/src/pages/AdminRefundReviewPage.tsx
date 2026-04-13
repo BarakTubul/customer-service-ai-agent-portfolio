@@ -77,7 +77,7 @@ export function AdminRefundReviewPage() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Manual Review Queue</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Manager Review Queue</h1>
         <Button onClick={() => void loadQueue()} disabled={loadingQueue || actionLoading} variant="outline">
           {loadingQueue ? 'Refreshing...' : 'Refresh Queue'}
         </Button>
@@ -123,7 +123,7 @@ export function AdminRefundReviewPage() {
         </Card>
 
         <Card>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Active Review</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Active Manager Review</h2>
           {!activeRequest ? (
             <p className="text-sm text-gray-600">Claim a request to review and decide.</p>
           ) : (

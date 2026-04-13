@@ -57,6 +57,28 @@ class HybridIntentGraph:
             state["reason"] = "rule_greeting_smalltalk"
             return state
 
+        if any(
+            phrase in normalized
+            for phrase in [
+                "human help",
+                "human support",
+                "human assistance",
+                "human agent",
+                "talk to a person",
+                "talk to human",
+                "speak with a human",
+                "speak to a human",
+                "real person",
+                "live agent",
+                "manager",
+                "escalat",
+            ]
+        ):
+            state["intent"] = "general_support"
+            state["confidence"] = 0.99
+            state["reason"] = "rule_human_escalation_request"
+            return state
+
         if any(token in normalized for token in ["refund", "money back", "reimburse"]):
             if any(phrase in normalized for phrase in ["request a refund", "ask for refund", "get a refund", "where can i ask for refund", "where can i request a refund"]):
                 state["intent"] = "refund_request"

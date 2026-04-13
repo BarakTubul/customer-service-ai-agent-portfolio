@@ -92,13 +92,14 @@ function AppRoutes() {
           }
         />
         <Route
-          path="/admin/refunds"
+          path="/manager/refunds"
           element={
             <AdminRoute>
               <AdminRefundReviewPage />
             </AdminRoute>
           }
         />
+        <Route path="/admin/refunds" element={<Navigate to="/manager/refunds" replace />} />
       </Routes>
     </>
   );

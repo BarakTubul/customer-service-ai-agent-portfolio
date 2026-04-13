@@ -9,6 +9,7 @@ from app.db.base import Base
 from app.models.user import User
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.faq_repository import FAQRepository
+from app.repositories.refund_repository import RefundRepository
 from app.services.intent_faq_service import IntentFAQService
 
 
@@ -391,6 +392,186 @@ def test_low_confidence_intent_requires_clarification() -> None:
         assert response.route == "clarify"
         assert response.clarification_question is not None
         assert "/dashboard" not in response.clarification_question
+    finally:
+        session.close()
+
+
+def test_human_help_intent_returns_escalation_clarification() -> None:
+    session = build_session()
+    try:
+        provider = FakeLLMProvider()
+        service = IntentFAQService(
+            faq_repository=FAQRepository(),
+            conversation_repository=ConversationRepository(session),
+            llm_provider=provider,
+            intent_graph=HybridIntentGraph(llm_provider=provider),
+            escalation_confidence_threshold=0.6,
+            llm_faq_synthesis_enabled=True,
+            retrieval_top_k=10,
+            max_context_chunks=5,
+            max_context_chars=2200,
+            min_chunk_score=0.10,
+            relative_score_floor=0.60,
+            synthesis_history_messages=6,
+            synthesis_history_chars=1200,
+        )
+
+        user = User(is_guest=True, is_active=True, is_verified=False)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        response = service.resolve_intent(
+            user=user,
+            session_id="sess-human-help",
+            message_text="Can I speak with a human?",
+            message_id="msg-human-help",
+        )
+
+        assert response.route == "clarify"
+        assert response.requires_clarification is True
+        assert response.clarification_question is not None
+        assert "manager review flow" in response.clarification_question.lower()
+    finally:
+        session.close()
+
+
+def test_escalation_intake_message_with_order_id_bypasses_faq() -> None:
+    session = build_session()
+    try:
+        provider = FakeLLMProvider()
+        service = IntentFAQService(
+            faq_repository=FAQRepository(),
+            conversation_repository=ConversationRepository(session),
+            llm_provider=provider,
+            intent_graph=HybridIntentGraph(llm_provider=provider),
+            escalation_confidence_threshold=0.6,
+            llm_faq_synthesis_enabled=True,
+            retrieval_top_k=10,
+            max_context_chunks=5,
+            max_context_chars=2200,
+            min_chunk_score=0.10,
+            relative_score_floor=0.60,
+            synthesis_history_messages=6,
+            synthesis_history_chars=1200,
+        )
+
+        user = User(is_guest=True, is_active=True, is_verified=False)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        response = service.search_faq(
+            user=user,
+            session_id="sess-escalation-intake",
+            query_text="ord_d6434aad5a it arrived late",
+            intent="order_status",
+        )
+
+        assert response.retrieval_mode == "handoff_intake"
+        assert "captured your escalation" in response.answer.text.lower()
+        assert "order ord_d6434aad5a" in response.answer.text.lower()
+        assert response.citations == []
+    finally:
+        session.close()
+
+
+def test_escalation_intake_creates_manual_review_queue_record() -> None:
+    session = build_session()
+    try:
+        provider = FakeLLMProvider()
+        refund_repository = RefundRepository(session)
+        service = IntentFAQService(
+            faq_repository=FAQRepository(),
+            conversation_repository=ConversationRepository(session),
+            llm_provider=provider,
+            intent_graph=HybridIntentGraph(llm_provider=provider),
+            escalation_confidence_threshold=0.6,
+            llm_faq_synthesis_enabled=True,
+            retrieval_top_k=10,
+            max_context_chunks=5,
+            max_context_chars=2200,
+            min_chunk_score=0.10,
+            relative_score_floor=0.60,
+            synthesis_history_messages=6,
+            synthesis_history_chars=1200,
+            refund_repository=refund_repository,
+        )
+
+        user = User(is_guest=False, is_active=True, is_verified=True)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        response = service.search_faq(
+            user=user,
+            session_id="sess-escalation-queue",
+            query_text="ord_d6434aad5a it was delayed",
+            intent="order_status",
+        )
+
+        assert response.retrieval_mode == "handoff_intake"
+        assert "reference id" in response.answer.text.lower()
+
+        queued = refund_repository.list_pending_manual_review(limit=10)
+        assert len(queued) == 1
+        assert queued[0].order_id == "ord_d6434aad5a"
+        assert queued[0].escalation_status == "queued"
+    finally:
+        session.close()
+
+
+def test_escalation_follow_up_confirmation_keeps_handoff_prompt() -> None:
+    session = build_session()
+    try:
+        provider = FakeLLMProvider()
+        service = IntentFAQService(
+            faq_repository=FAQRepository(),
+            conversation_repository=ConversationRepository(session),
+            llm_provider=provider,
+            intent_graph=HybridIntentGraph(llm_provider=provider),
+            escalation_confidence_threshold=0.6,
+            llm_faq_synthesis_enabled=True,
+            retrieval_top_k=10,
+            max_context_chunks=5,
+            max_context_chars=2200,
+            min_chunk_score=0.10,
+            relative_score_floor=0.60,
+            synthesis_history_messages=6,
+            synthesis_history_chars=1200,
+        )
+
+        user = User(is_guest=True, is_active=True, is_verified=False)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        first = service.resolve_intent(
+            user=user,
+            session_id="sess-escalation-followup",
+            message_text="Can I ask for human assistance?",
+            message_id="msg-escalation-first",
+        )
+        assert first.route == "clarify"
+        assert first.clarification_question is not None
+
+        service.conversation_repository.add_message(
+            session_id="sess-escalation-followup",
+            user_id=user.id,
+            role="assistant",
+            text=first.clarification_question,
+        )
+
+        follow_up = service.resolve_intent(
+            user=user,
+            session_id="sess-escalation-followup",
+            message_text="ok i need one please",
+            message_id="msg-escalation-followup",
+        )
+
+        assert follow_up.route == "clarify"
+        assert follow_up.clarification_question is not None
+        assert "share your order id" in follow_up.clarification_question.lower()
     finally:
         session.close()
 
