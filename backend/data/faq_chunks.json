@@ -1,0 +1,330 @@
+[
+  {
+    "chunk_id": "refund-policy-v1-1",
+    "intent": "refund_policy",
+    "source_id": "refund-policy-v1",
+    "source_label": "Based on Refund Policy",
+    "policy_version": "2026.03",
+    "text": "Refunds are typically processed within 5 to 7 business days after approval."
+  },
+  {
+    "chunk_id": "refund-policy-v1-2",
+    "intent": "refund_policy",
+    "source_id": "refund-policy-v1",
+    "source_label": "Based on Refund Policy",
+    "policy_version": "2026.03",
+    "text": "Users can check refund progress from support using the refund request ID."
+  },
+  {
+    "chunk_id": "refund-policy-v1-3",
+    "intent": "refund_policy",
+    "source_id": "refund-policy-v1",
+    "source_label": "Based on Refund Policy",
+    "policy_version": "2026.03",
+    "text": "Refund eligibility depends on order state, reason code, and policy time window."
+  },
+  {
+    "chunk_id": "refund-policy-v1-4",
+    "intent": "refund_policy",
+    "source_id": "refund-policy-v1",
+    "source_label": "Based on Refund Policy",
+    "policy_version": "2026.03",
+    "text": "Duplicate refund submissions return the existing request reference instead of creating a new one."
+  },
+  {
+    "chunk_id": "refund-policy-v1-5",
+    "intent": "refund_policy",
+    "source_id": "refund-policy-v1",
+    "source_label": "Based on Refund Policy",
+    "policy_version": "2026.03",
+    "text": "Partial refunds may require selecting specific items and quantities from the original order."
+  },
+  {
+    "chunk_id": "refund-policy-v1-6",
+    "intent": "refund_policy",
+    "source_id": "refund-policy-v1",
+    "source_label": "Based on Refund Policy",
+    "policy_version": "2026.03",
+    "text": "If a refund request is ineligible, users receive a policy reason and can request escalation."
+  },
+  {
+    "chunk_id": "refund-policy-v1-7",
+    "intent": "refund_policy",
+    "source_id": "refund-policy-v1",
+    "source_label": "Based on Refund Policy",
+    "policy_version": "2026.03",
+    "text": "Refund status values include submitted, under review, approved, and denied."
+  },
+  {
+    "chunk_id": "order-status-v1-1",
+    "intent": "order_status",
+    "source_id": "order-status-v1",
+    "source_label": "Based on Order Status Guide",
+    "policy_version": "2026.03",
+    "text": "You can track your order from the Orders section once you are signed in."
+  },
+  {
+    "chunk_id": "order-status-v1-2",
+    "intent": "order_status",
+    "source_id": "order-status-v1",
+    "source_label": "Based on Order Status Guide",
+    "policy_version": "2026.03",
+    "text": "Order timeline updates include accepted, preparing, pickup, in transit, and delivered."
+  },
+  {
+    "chunk_id": "order-status-v1-3",
+    "intent": "order_status",
+    "source_id": "order-status-v1",
+    "source_label": "Based on Order Status Guide",
+    "policy_version": "2026.03",
+    "text": "Expected delivery windows are estimates and may change when simulation scenarios include delays."
+  },
+  {
+    "chunk_id": "order-status-v1-4",
+    "intent": "order_status",
+    "source_id": "order-status-v1",
+    "source_label": "Based on Order Status Guide",
+    "policy_version": "2026.03",
+    "text": "If no updates appear for an extended period, users can request human escalation."
+  },
+  {
+    "chunk_id": "order-status-v1-5",
+    "intent": "order_status",
+    "source_id": "order-status-v1",
+    "source_label": "Based on Order Status Guide",
+    "policy_version": "2026.03",
+    "text": "Only authenticated users can retrieve their own order status and timeline data."
+  },
+  {
+    "chunk_id": "order-status-v1-6",
+    "intent": "order_status",
+    "source_id": "order-status-v1",
+    "source_label": "Based on Order Status Guide",
+    "policy_version": "2026.03",
+    "text": "Invalid order IDs return a not found response with guidance to verify the identifier."
+  },
+  {
+    "chunk_id": "order-status-v1-7",
+    "intent": "order_status",
+    "source_id": "order-status-v1",
+    "source_label": "Based on Order Status Guide",
+    "policy_version": "2026.03",
+    "text": "Timeline simulation supports scenarios like slow preparation, delayed pickup, and driver shortage."
+  },
+  {
+    "chunk_id": "order-placement-v1-1",
+    "intent": "order_placement",
+    "source_id": "order-placement-v1",
+    "source_label": "Based on Order Placement Guide",
+    "policy_version": "2026.03",
+    "text": "You can place a food order from the Order page after signing in."
+  },
+  {
+    "chunk_id": "order-placement-v1-2",
+    "intent": "order_placement",
+    "source_id": "order-placement-v1",
+    "source_label": "Based on Order Placement Guide",
+    "policy_version": "2026.03",
+    "text": "Use the catalog to choose items, add them to your cart, and complete checkout."
+  },
+  {
+    "chunk_id": "order-placement-v1-3",
+    "intent": "order_placement",
+    "source_id": "order-placement-v1",
+    "source_label": "Based on Order Placement Guide",
+    "policy_version": "2026.03",
+    "text": "Guest users can browse the catalog, but a registered account is required to submit an order."
+  },
+  {
+    "chunk_id": "order-placement-v1-4",
+    "intent": "order_placement",
+    "source_id": "order-placement-v1",
+    "source_label": "Based on Order Placement Guide",
+    "policy_version": "2026.03",
+    "text": "Checkout validation checks shipping address, delivery option, and payment reference before submission."
+  },
+  {
+    "chunk_id": "refund-request-v1-1",
+    "intent": "refund_request",
+    "source_id": "refund-request-v1",
+    "source_label": "Based on Refund Request Guide",
+    "policy_version": "2026.03",
+    "text": "You can start a refund request from the Refund page after selecting an eligible order."
+  },
+  {
+    "chunk_id": "refund-request-v1-2",
+    "intent": "refund_request",
+    "source_id": "refund-request-v1",
+    "source_label": "Based on Refund Request Guide",
+    "policy_version": "2026.03",
+    "text": "Refund requests require a reason code and may be reviewed before approval."
+  },
+  {
+    "chunk_id": "refund-request-v1-3",
+    "intent": "refund_request",
+    "source_id": "refund-request-v1",
+    "source_label": "Based on Refund Request Guide",
+    "policy_version": "2026.03",
+    "text": "Duplicate refund requests reuse the existing request instead of creating a duplicate."
+  },
+  {
+    "chunk_id": "refund-request-v1-4",
+    "intent": "refund_request",
+    "source_id": "refund-request-v1",
+    "source_label": "Based on Refund Request Guide",
+    "policy_version": "2026.03",
+    "text": "If a refund request is not eligible, the assistant can explain the policy reason and next steps."
+  },
+  {
+    "chunk_id": "verification-v1-1",
+    "intent": "account_verification",
+    "source_id": "verification-v1",
+    "source_label": "Based on Account Verification Guide",
+    "policy_version": "2026.03",
+    "text": "Complete email or SMS verification to unlock protected account actions."
+  },
+  {
+    "chunk_id": "verification-v1-2",
+    "intent": "account_verification",
+    "source_id": "verification-v1",
+    "source_label": "Based on Account Verification Guide",
+    "policy_version": "2026.03",
+    "text": "Unverified accounts can browse but cannot perform protected account or refund actions."
+  },
+  {
+    "chunk_id": "verification-v1-3",
+    "intent": "account_verification",
+    "source_id": "verification-v1",
+    "source_label": "Based on Account Verification Guide",
+    "policy_version": "2026.03",
+    "text": "Verification challenges can expire and users may request resend after cooldown."
+  },
+  {
+    "chunk_id": "verification-v1-4",
+    "intent": "account_verification",
+    "source_id": "verification-v1",
+    "source_label": "Based on Account Verification Guide",
+    "policy_version": "2026.03",
+    "text": "Too many incorrect verification attempts can trigger temporary lockout behavior."
+  },
+  {
+    "chunk_id": "verification-v1-5",
+    "intent": "account_verification",
+    "source_id": "verification-v1",
+    "source_label": "Based on Account Verification Guide",
+    "policy_version": "2026.03",
+    "text": "Verified and active accounts can log in and access protected support features."
+  },
+  {
+    "chunk_id": "verification-v1-6",
+    "intent": "account_verification",
+    "source_id": "verification-v1",
+    "source_label": "Based on Account Verification Guide",
+    "policy_version": "2026.03",
+    "text": "Guest sessions can be upgraded to registered accounts without losing eligible conversation context."
+  },
+  {
+    "chunk_id": "verification-v1-7",
+    "intent": "account_verification",
+    "source_id": "verification-v1",
+    "source_label": "Based on Account Verification Guide",
+    "policy_version": "2026.03",
+    "text": "Verification state transitions are pending, verified active, locked, or disabled."
+  },
+  {
+    "chunk_id": "general-support-v1-1",
+    "intent": "general_support",
+    "source_id": "support-guide-v1",
+    "source_label": "Based on Support Guide",
+    "policy_version": "2026.03",
+    "text": "If the assistant is uncertain, it should ask a clarifying question before taking action."
+  },
+  {
+    "chunk_id": "general-support-v1-2",
+    "intent": "general_support",
+    "source_id": "support-guide-v1",
+    "source_label": "Based on Support Guide",
+    "policy_version": "2026.03",
+    "text": "Users can ask for human help at any point and receive escalation status updates."
+  },
+  {
+    "chunk_id": "general-support-v1-3",
+    "intent": "general_support",
+    "source_id": "support-guide-v1",
+    "source_label": "Based on Support Guide",
+    "policy_version": "2026.03",
+    "text": "Sensitive account details are masked in responses to protect user privacy."
+  },
+  {
+    "chunk_id": "general-support-v1-4",
+    "intent": "general_support",
+    "source_id": "support-guide-v1",
+    "source_label": "Based on Support Guide",
+    "policy_version": "2026.03",
+    "text": "Users can sign in from the Login page and create an account from the Register page."
+  },
+  {
+    "chunk_id": "general-support-v1-5",
+    "intent": "general_support",
+    "source_id": "support-guide-v1",
+    "source_label": "Based on Support Guide",
+    "policy_version": "2026.03",
+    "text": "If login fails, users should verify credentials and retry password recovery if available."
+  },
+  {
+    "chunk_id": "general-support-v1-6",
+    "intent": "general_support",
+    "source_id": "support-guide-v1",
+    "source_label": "Based on Support Guide",
+    "policy_version": "2026.03",
+    "text": "For urgent unresolved issues, users can request human support escalation directly in chat."
+  },
+  {
+    "chunk_id": "order-placement-v1-5",
+    "intent": "order_placement",
+    "source_id": "order-placement-v1",
+    "source_label": "Based on Order Placement Guide",
+    "policy_version": "2026.03",
+    "text": "The Order page lets users search dishes, add items to cart, validate checkout, and submit orders."
+  },
+  {
+    "chunk_id": "order-placement-v1-6",
+    "intent": "order_placement",
+    "source_id": "order-placement-v1",
+    "source_label": "Based on Order Placement Guide",
+    "policy_version": "2026.03",
+    "text": "If checkout validation fails, users should update address or payment details before retrying."
+  },
+  {
+    "chunk_id": "order-status-v1-8",
+    "intent": "order_status",
+    "source_id": "order-status-v1",
+    "source_label": "Based on Order Status Guide",
+    "policy_version": "2026.03",
+    "text": "Users can open an order timeline to review each status transition and timestamp."
+  },
+  {
+    "chunk_id": "refund-request-v1-5",
+    "intent": "refund_request",
+    "source_id": "refund-request-v1",
+    "source_label": "Based on Refund Request Guide",
+    "policy_version": "2026.03",
+    "text": "To request a refund, users should open the Refund page, choose an order, and submit a reason code."
+  },
+  {
+    "chunk_id": "refund-request-v1-6",
+    "intent": "refund_request",
+    "source_id": "refund-request-v1",
+    "source_label": "Based on Refund Request Guide",
+    "policy_version": "2026.03",
+    "text": "Guest users cannot submit refund requests and need a registered account for this flow."
+  },
+  {
+    "chunk_id": "account-verification-v1-8",
+    "intent": "account_verification",
+    "source_id": "verification-v1",
+    "source_label": "Based on Account Verification Guide",
+    "policy_version": "2026.03",
+    "text": "Users can review account state and profile details from the Dashboard after authentication."
+  }
+]

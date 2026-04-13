@@ -4,6 +4,7 @@ $workspaceRoot = Split-Path -Parent $PSScriptRoot
 $backendRoot = Join-Path $workspaceRoot 'backend'
 $frontendRoot = Join-Path $workspaceRoot 'frontend'
 $pythonPath = Join-Path $workspaceRoot '.venv\Scripts\python.exe'
+$debugPort = 5678
 
 function Test-PortOpen {
     param(
@@ -30,10 +31,14 @@ function Test-PortOpen {
 }
 
 if (-not (Test-PortOpen -HostName '127.0.0.1' -Port 8000)) {
-    Start-Process -FilePath $pythonPath -WorkingDirectory $backendRoot -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--reload')
+    Start-Process -FilePath $pythonPath -WorkingDirectory $backendRoot -ArgumentList @('-m', 'debugpy', '--listen', "127.0.0.1:$debugPort", '-m', 'uvicorn', 'app.main:app', '--reload')
 }
 
 while (-not (Test-PortOpen -HostName '127.0.0.1' -Port 8000)) {
+    Start-Sleep -Milliseconds 500
+}
+
+while (-not (Test-PortOpen -HostName '127.0.0.1' -Port $debugPort)) {
     Start-Sleep -Milliseconds 500
 }
 

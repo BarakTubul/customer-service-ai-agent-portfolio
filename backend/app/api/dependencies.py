@@ -74,7 +74,8 @@ def get_refund_service(
 
 
 def get_faq_repository() -> FAQRepository:
-    return FAQRepository()
+    settings = get_settings()
+    return FAQRepository(faq_chunks_path=settings.faq_chunks_path)
 
 
 def get_conversation_repository(db: Session = Depends(get_db)) -> ConversationRepository:
@@ -114,6 +115,13 @@ def get_intent_faq_service(
         intent_graph=intent_graph,
         escalation_confidence_threshold=settings.intent_escalation_confidence_threshold,
         llm_faq_synthesis_enabled=settings.llm_faq_synthesis_enabled,
+        retrieval_top_k=settings.faq_retrieval_top_k,
+        max_context_chunks=settings.faq_max_context_chunks,
+        max_context_chars=settings.faq_max_context_chars,
+        min_chunk_score=settings.faq_min_chunk_score,
+        relative_score_floor=settings.faq_relative_score_floor,
+        synthesis_history_messages=settings.faq_synthesis_history_messages,
+        synthesis_history_chars=settings.faq_synthesis_history_chars,
     )
 
 

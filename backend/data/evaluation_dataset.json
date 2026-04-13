@@ -1,0 +1,107 @@
+[
+  {
+    "question": "where can i order food?",
+    "intent": "order_placement",
+    "expected_chunk_ids": ["order-placement-v1-1", "order-placement-v1-2"],
+    "expected_answer_contains": ["order", "place"],
+    "ground_truth": "You can place an order through our order placement page."
+  },
+  {
+    "question": "how do i place an order?",
+    "intent": "order_placement",
+    "expected_chunk_ids": ["order-placement-v1-1", "order-placement-v1-3"],
+    "expected_answer_contains": ["place", "order", "steps"],
+    "ground_truth": "Visit the order placement page and follow the checkout process."
+  },
+  {
+    "question": "what's the refund process?",
+    "intent": "refund_policy",
+    "expected_chunk_ids": ["refund-policy-v1-1", "refund-policy-v1-3"],
+    "expected_answer_contains": ["refund", "process", "days"],
+    "ground_truth": "Refunds are typically processed within 5 to 7 business days after approval."
+  },
+  {
+    "question": "how do i request a refund?",
+    "intent": "refund_request",
+    "expected_chunk_ids": ["refund-request-v1-1", "refund-request-v1-2"],
+    "expected_answer_contains": ["refund", "request"],
+    "ground_truth": "You can request a refund through our refund request page."
+  },
+  {
+    "question": "where can i check my order status?",
+    "intent": "order_status",
+    "expected_chunk_ids": ["order-status-v1-1", "order-status-v1-2"],
+    "expected_answer_contains": ["status", "order", "check"],
+    "ground_truth": "Visit the orders page to check your order status."
+  },
+  {
+    "question": "how long does it take to get a refund?",
+    "intent": "refund_policy",
+    "expected_chunk_ids": ["refund-policy-v1-1", "refund-policy-v1-5"],
+    "expected_answer_contains": ["refund", "days", "business"],
+    "ground_truth": "Refunds are typically processed within 5 to 7 business days."
+  },
+  {
+    "question": "can i track my order?",
+    "intent": "order_status",
+    "expected_chunk_ids": ["order-status-v1-3", "order-status-v1-4"],
+    "expected_answer_contains": ["track", "order", "status"],
+    "ground_truth": "You can track your order from the orders dashboard."
+  },
+  {
+    "question": "what if my refund is denied?",
+    "intent": "refund_policy",
+    "expected_chunk_ids": ["refund-policy-v1-6"],
+    "expected_answer_contains": ["refund", "deny", "denied", "ineligible"],
+    "ground_truth": "If denied, you receive a policy reason and can request escalation."
+  },
+  {
+    "question": "how do i create an account?",
+    "intent": "account_verification",
+    "expected_chunk_ids": ["account-verification-v1-1", "account-verification-v1-2"],
+    "expected_answer_contains": ["account", "create", "register"],
+    "ground_truth": "Visit the registration page and complete the account creation process."
+  },
+  {
+    "question": "what if i forgot my password?",
+    "intent": "account_verification",
+    "expected_chunk_ids": ["account-verification-v1-5", "account-verification-v1-6"],
+    "expected_answer_contains": ["password", "reset", "recover"],
+    "ground_truth": "Use the password reset option to recover your account."
+  },
+  {
+    "question": "do i need an account to order?",
+    "intent": "general_support",
+    "expected_chunk_ids": ["general-support-v1-1"],
+    "expected_answer_contains": ["account", "order", "guest"],
+    "ground_truth": "You can order as a guest or create an account for faster checkout."
+  },
+  {
+    "question": "when will my order arrive?",
+    "intent": "order_status",
+    "expected_chunk_ids": ["order-status-v1-7", "order-status-v1-8"],
+    "expected_answer_contains": ["arrive", "delivery", "time"],
+    "ground_truth": "Check the estimated delivery date on the order details page."
+  },
+  {
+    "question": "how do i partially refund an order?",
+    "intent": "refund_policy",
+    "expected_chunk_ids": ["refund-policy-v1-5"],
+    "expected_answer_contains": ["partial", "refund", "items"],
+    "ground_truth": "Partial refunds may require selecting specific items from the order."
+  },
+  {
+    "question": "what payment methods do you accept?",
+    "intent": "order_placement",
+    "expected_chunk_ids": ["order-placement-v1-4", "order-placement-v1-5"],
+    "expected_answer_contains": ["payment", "methods", "accept"],
+    "ground_truth": "We accept major credit cards, debit cards, and digital wallets."
+  },
+  {
+    "question": "is my data secure?",
+    "intent": "general_support",
+    "expected_chunk_ids": ["general-support-v1-4"],
+    "expected_answer_contains": ["secure", "data", "security"],
+    "ground_truth": "Your data is encrypted and protected by industry-standard security."
+  }
+]

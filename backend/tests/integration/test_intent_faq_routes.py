@@ -29,6 +29,44 @@ def test_intent_resolve_returns_refund_intent(client: TestClient) -> None:
     assert payload["route"] == "faq_answer"
 
 
+def test_intent_resolve_returns_refund_request_intent(client: TestClient) -> None:
+    headers = _auth_headers(client)
+    response = client.post(
+        "/api/v1/intent/resolve",
+        json={
+            "session_id": "sess-refund-request",
+            "message_id": "msg-refund-request",
+            "message_text": "Where can I ask for refund?",
+            "locale": "en-US",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"] == "refund_request"
+    assert payload["route"] == "faq_answer"
+
+
+def test_intent_resolve_returns_order_placement_intent(client: TestClient) -> None:
+    headers = _auth_headers(client)
+    response = client.post(
+        "/api/v1/intent/resolve",
+        json={
+            "session_id": "sess-order-placement",
+            "message_id": "msg-order-placement",
+            "message_text": "Where can I order food?",
+            "locale": "en-US",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"] == "order_placement"
+    assert payload["route"] == "faq_answer"
+
+
 def test_faq_search_and_context_roundtrip(client: TestClient) -> None:
     headers = _auth_headers(client)
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { Header } from '@/components/Header';
+import { FloatingChatWidget } from '@/components/FloatingChatWidget';
 import { IndexPage } from '@/pages/IndexPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
@@ -10,7 +11,6 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { OrdersPage } from '@/pages/OrdersPage';
 import { OrderDetailPage } from '@/pages/OrderDetailPage';
 import { OrderTimelinePage } from '@/pages/OrderTimelinePage';
-import { ChatPage } from '@/pages/ChatPage';
 import { OrderPlacementPage } from '@/pages/OrderPlacementPage';
 import { RefundPage } from '@/pages/RefundPage';
 import { AdminRefundReviewPage } from '@/pages/AdminRefundReviewPage';
@@ -37,6 +37,7 @@ function AppRoutes() {
   return (
     <>
       {isAuthenticated && <Header />}
+      {isAuthenticated && <FloatingChatWidget />}
       <Routes>
         <Route path="/" element={<IndexPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -71,14 +72,6 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <OrderTimelinePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/chat"
-          element={
-            <ProtectedRoute>
-              <ChatPage />
             </ProtectedRoute>
           }
         />

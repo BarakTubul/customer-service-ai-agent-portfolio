@@ -1,13 +1,50 @@
 {
   "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "Open Full Stack App + Backend Debugger",
+      "configurations": [
+        "Open Full Stack App",
+        "Backend: Launch uvicorn (debug)"
+      ],
+      "stopAll": true
+    }
+  ],
   "configurations": [
     {
+      "name": "Backend: Launch uvicorn (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}/backend",
+      "args": [
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "envFile": "${workspaceFolder}/backend/.env",
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Backend: Auto Attach uvicorn (5678)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "127.0.0.1",
+        "port": 5678
+      },
+      "justMyCode": true
+    },
+    {
       "name": "Open Full Stack App",
-      "type": "pwa-msedge",
+      "type": "chrome",
       "request": "launch",
       "url": "http://localhost:3000",
       "webRoot": "${workspaceFolder}/frontend/src",
-      "preLaunchTask": "Start Full Stack"
+      "preLaunchTask": "Start Frontend Dev"
     }
   ]
 }

@@ -28,22 +28,23 @@ export function ChatPage() {
     setError('');
 
     try {
-      const response = await apiClient.resolveIntent(userMessage, sessionId);
+      const response = await apiClient.resolveIntent(
+        userMessage,
+        sessionId,
+        `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      );
 
       let assistantContent = '';
       let citations: t.FAQCitation[] = [];
 
       if (response.route === 'clarify') {
         assistantContent =
-          "I'm not sure I understand your question. Could you provide more details about your issue?";
-      } else if (response.route === 'escalate') {
-        assistantContent =
-          'This issue requires special attention. A support agent will be with you shortly.';
-      } else if (response.answer) {
-        assistantContent = response.answer.text;
-        citations = response.citations || [];
+          response.clarification_question ||
+          "I'm not sure I understand your question. Could you provide more details?";
       } else {
-        assistantContent = `I detected a question about: ${response.intent} (confidence: ${(response.confidence * 100).toFixed(0)}%)`;
+        const faqResult = await apiClient.searchFAQ(userMessage, sessionId, response.intent);
+        assistantContent = faqResult.answer.text;
+        citations = faqResult.citations || [];
       }
 
       setMessages((prev) => [

@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     intent_rule_confidence_threshold: float = 0.75
     intent_escalation_confidence_threshold: float = 0.6
     llm_faq_synthesis_enabled: bool = True
+    faq_chunks_path: str = "data/faq_chunks.json"
+    faq_retrieval_top_k: int = 5
+    faq_max_context_chunks: int = 5
+    faq_max_context_chars: int = 2200
+    faq_min_chunk_score: float = 0.0
+    faq_relative_score_floor: float = 0.0
+    faq_synthesis_history_messages: int = 6
+    faq_synthesis_history_chars: int = 1200
     mock_data_path: str = "backend/data/mock_data.json"
 
     @property

@@ -19,7 +19,6 @@ export function Header() {
     ? [{ label: 'Refund Reviews', path: '/admin/refunds' }]
     : [
         { label: 'My Orders', path: '/orders' },
-        { label: 'Chat', path: '/chat' },
         { label: 'Order', path: '/order' },
         { label: 'Refunds', path: '/refund' },
       ];

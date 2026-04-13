@@ -12,7 +12,15 @@ class FakeLLMProvider:
         self.calls += 1
         return IntentClassification(intent="general_support", confidence=0.77, reason="fake_llm")
 
-    def synthesize_faq_answer(self, *, question: str, base_answer: str, source_label: str) -> str:
+    def synthesize_faq_answer(
+        self,
+        *,
+        question: str,
+        base_answer: str,
+        source_label: str,
+        faq_context: str | None = None,
+        conversation_context: str | None = None,
+    ) -> str:
         return base_answer
 
 
@@ -27,15 +35,16 @@ def test_rule_path_skips_llm() -> None:
     assert provider.calls == 0
 
 
-def test_low_confidence_path_uses_llm() -> None:
+def test_greeting_path_skips_llm() -> None:
     provider = FakeLLMProvider()
     graph = HybridIntentGraph(llm_provider=provider, rule_confidence_threshold=0.75)
 
     result = graph.run(message_text="hi")
 
-    assert result["used_llm"] is True
+    assert result["used_llm"] is False
     assert result["intent"] == "general_support"
-    assert provider.calls == 1
+    assert result["reason"] == "rule_greeting_smalltalk"
+    assert provider.calls == 0
 
 
 def test_refund_rule_path_skips_llm() -> None:

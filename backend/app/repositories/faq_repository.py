@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 import re
 
 
@@ -28,201 +30,54 @@ class FAQChunk:
 
 
 class FAQRepository:
-    def __init__(self) -> None:
-        self._chunks: list[FAQChunk] = [
-            FAQChunk(
-                chunk_id="refund-policy-v1-1",
-                intent="refund_policy",
-                source_id="refund-policy-v1",
-                source_label="Based on Refund Policy",
-                policy_version="2026.03",
-                text="Refunds are typically processed within 5 to 7 business days after approval.",
-            ),
-            FAQChunk(
-                chunk_id="refund-policy-v1-2",
-                intent="refund_policy",
-                source_id="refund-policy-v1",
-                source_label="Based on Refund Policy",
-                policy_version="2026.03",
-                text="Users can check refund progress from support using the refund request ID.",
-            ),
-            FAQChunk(
-                chunk_id="refund-policy-v1-3",
-                intent="refund_policy",
-                source_id="refund-policy-v1",
-                source_label="Based on Refund Policy",
-                policy_version="2026.03",
-                text="Refund eligibility depends on order state, reason code, and policy time window.",
-            ),
-            FAQChunk(
-                chunk_id="refund-policy-v1-4",
-                intent="refund_policy",
-                source_id="refund-policy-v1",
-                source_label="Based on Refund Policy",
-                policy_version="2026.03",
-                text="Duplicate refund submissions return the existing request reference instead of creating a new one.",
-            ),
-            FAQChunk(
-                chunk_id="refund-policy-v1-5",
-                intent="refund_policy",
-                source_id="refund-policy-v1",
-                source_label="Based on Refund Policy",
-                policy_version="2026.03",
-                text="Partial refunds may require selecting specific items and quantities from the original order.",
-            ),
-            FAQChunk(
-                chunk_id="refund-policy-v1-6",
-                intent="refund_policy",
-                source_id="refund-policy-v1",
-                source_label="Based on Refund Policy",
-                policy_version="2026.03",
-                text="If a refund request is ineligible, users receive a policy reason and can request escalation.",
-            ),
-            FAQChunk(
-                chunk_id="refund-policy-v1-7",
-                intent="refund_policy",
-                source_id="refund-policy-v1",
-                source_label="Based on Refund Policy",
-                policy_version="2026.03",
-                text="Refund status values include submitted, under review, approved, and denied.",
-            ),
-            FAQChunk(
-                chunk_id="order-status-v1-1",
-                intent="order_status",
-                source_id="order-status-v1",
-                source_label="Based on Order Status Guide",
-                policy_version="2026.03",
-                text="You can track your order from the Orders section once you are signed in.",
-            ),
-            FAQChunk(
-                chunk_id="order-status-v1-2",
-                intent="order_status",
-                source_id="order-status-v1",
-                source_label="Based on Order Status Guide",
-                policy_version="2026.03",
-                text="Order timeline updates include accepted, preparing, pickup, in transit, and delivered.",
-            ),
-            FAQChunk(
-                chunk_id="order-status-v1-3",
-                intent="order_status",
-                source_id="order-status-v1",
-                source_label="Based on Order Status Guide",
-                policy_version="2026.03",
-                text="Expected delivery windows are estimates and may change when simulation scenarios include delays.",
-            ),
-            FAQChunk(
-                chunk_id="order-status-v1-4",
-                intent="order_status",
-                source_id="order-status-v1",
-                source_label="Based on Order Status Guide",
-                policy_version="2026.03",
-                text="If no updates appear for an extended period, users can request human escalation.",
-            ),
-            FAQChunk(
-                chunk_id="order-status-v1-5",
-                intent="order_status",
-                source_id="order-status-v1",
-                source_label="Based on Order Status Guide",
-                policy_version="2026.03",
-                text="Only authenticated users can retrieve their own order status and timeline data.",
-            ),
-            FAQChunk(
-                chunk_id="order-status-v1-6",
-                intent="order_status",
-                source_id="order-status-v1",
-                source_label="Based on Order Status Guide",
-                policy_version="2026.03",
-                text="Invalid order IDs return a not found response with guidance to verify the identifier.",
-            ),
-            FAQChunk(
-                chunk_id="order-status-v1-7",
-                intent="order_status",
-                source_id="order-status-v1",
-                source_label="Based on Order Status Guide",
-                policy_version="2026.03",
-                text="Timeline simulation supports scenarios like slow preparation, delayed pickup, and driver shortage.",
-            ),
-            FAQChunk(
-                chunk_id="verification-v1-1",
-                intent="account_verification",
-                source_id="verification-v1",
-                source_label="Based on Account Verification Guide",
-                policy_version="2026.03",
-                text="Complete email or SMS verification to unlock protected account actions.",
-            ),
-            FAQChunk(
-                chunk_id="verification-v1-2",
-                intent="account_verification",
-                source_id="verification-v1",
-                source_label="Based on Account Verification Guide",
-                policy_version="2026.03",
-                text="Unverified accounts can browse but cannot perform protected account or refund actions.",
-            ),
-            FAQChunk(
-                chunk_id="verification-v1-3",
-                intent="account_verification",
-                source_id="verification-v1",
-                source_label="Based on Account Verification Guide",
-                policy_version="2026.03",
-                text="Verification challenges can expire and users may request resend after cooldown.",
-            ),
-            FAQChunk(
-                chunk_id="verification-v1-4",
-                intent="account_verification",
-                source_id="verification-v1",
-                source_label="Based on Account Verification Guide",
-                policy_version="2026.03",
-                text="Too many incorrect verification attempts can trigger temporary lockout behavior.",
-            ),
-            FAQChunk(
-                chunk_id="verification-v1-5",
-                intent="account_verification",
-                source_id="verification-v1",
-                source_label="Based on Account Verification Guide",
-                policy_version="2026.03",
-                text="Verified and active accounts can log in and access protected support features.",
-            ),
-            FAQChunk(
-                chunk_id="verification-v1-6",
-                intent="account_verification",
-                source_id="verification-v1",
-                source_label="Based on Account Verification Guide",
-                policy_version="2026.03",
-                text="Guest sessions can be upgraded to registered accounts without losing eligible conversation context.",
-            ),
-            FAQChunk(
-                chunk_id="verification-v1-7",
-                intent="account_verification",
-                source_id="verification-v1",
-                source_label="Based on Account Verification Guide",
-                policy_version="2026.03",
-                text="Verification state transitions are pending, verified active, locked, or disabled.",
-            ),
-            FAQChunk(
-                chunk_id="general-support-v1-1",
-                intent="general_support",
-                source_id="support-guide-v1",
-                source_label="Based on Support Guide",
-                policy_version="2026.03",
-                text="If the assistant is uncertain, it should ask a clarifying question before taking action.",
-            ),
-            FAQChunk(
-                chunk_id="general-support-v1-2",
-                intent="general_support",
-                source_id="support-guide-v1",
-                source_label="Based on Support Guide",
-                policy_version="2026.03",
-                text="Users can ask for human help at any point and receive escalation status updates.",
-            ),
-            FAQChunk(
-                chunk_id="general-support-v1-3",
-                intent="general_support",
-                source_id="support-guide-v1",
-                source_label="Based on Support Guide",
-                policy_version="2026.03",
-                text="Sensitive account details are masked in responses to protect user privacy.",
-            ),
-        ]
+    def __init__(self, faq_chunks_path: str | Path | None = None) -> None:
+        self._chunks = self._load_chunks(faq_chunks_path)
+
+    @staticmethod
+    def _backend_root() -> Path:
+        return Path(__file__).resolve().parents[2]
+
+    def _resolve_chunks_path(self, faq_chunks_path: str | Path | None) -> Path:
+        if faq_chunks_path is None:
+            return self._backend_root() / "data" / "faq_chunks.json"
+
+        resolved = Path(faq_chunks_path)
+        if resolved.is_absolute():
+            return resolved
+
+        backend_root = self._backend_root()
+        repo_root = backend_root.parent
+        candidates = [backend_root / resolved, repo_root / resolved]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[0]
+
+    def _load_chunks(self, faq_chunks_path: str | Path | None) -> list[FAQChunk]:
+        chunks_path = self._resolve_chunks_path(faq_chunks_path)
+        if not chunks_path.exists():
+            raise FileNotFoundError(f"FAQ chunks file not found: {chunks_path}")
+
+        raw = json.loads(chunks_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            raise ValueError("FAQ chunks file must contain a list")
+
+        chunks: list[FAQChunk] = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                raise ValueError(f"FAQ chunk at index {index} must be an object")
+            chunks.append(
+                FAQChunk(
+                    chunk_id=str(item["chunk_id"]),
+                    intent=str(item["intent"]),
+                    source_id=str(item["source_id"]),
+                    source_label=str(item["source_label"]),
+                    policy_version=str(item["policy_version"]),
+                    text=str(item["text"]),
+                )
+            )
+
+        return chunks
 
     def retrieve_chunks(self, *, intent: str, query_text: str, top_k: int = 3) -> list[tuple[FAQChunk, float]]:
         query_tokens = _tokenize(query_text)
