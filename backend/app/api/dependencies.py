@@ -116,8 +116,6 @@ def get_hybrid_intent_graph(llm_provider: LLMProvider = Depends(get_llm_provider
 def get_intent_faq_service(
     faq_repository: FAQRepository = Depends(get_faq_repository),
     conversation_repository: ConversationRepository = Depends(get_conversation_repository),
-    refund_repository: RefundRepository = Depends(get_refund_repository),
-    support_repository: SupportRepository = Depends(get_support_repository),
     llm_provider: LLMProvider = Depends(get_llm_provider),
     intent_graph: HybridIntentGraph = Depends(get_hybrid_intent_graph),
 ) -> IntentFAQService:
@@ -134,8 +132,6 @@ def get_intent_faq_service(
         max_context_chars=settings.faq_max_context_chars,
         min_chunk_score=settings.faq_min_chunk_score,
         relative_score_floor=settings.faq_relative_score_floor,
-        refund_repository=refund_repository,
-        support_repository=support_repository,
         synthesis_history_messages=settings.faq_synthesis_history_messages,
         synthesis_history_chars=settings.faq_synthesis_history_chars,
     )

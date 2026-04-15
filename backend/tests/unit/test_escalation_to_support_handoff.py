@@ -9,8 +9,6 @@ from app.db.base import Base
 from app.models.user import User
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.faq_repository import FAQRepository
-from app.repositories.refund_repository import RefundRepository
-from app.repositories.support_repository import SupportRepository
 from app.services.intent_faq_service import IntentFAQService
 
 
@@ -18,10 +16,12 @@ TEST_DATABASE_URL = "sqlite+pysqlite:///:memory:"
 
 
 class FakeLLMProvider:
-    def __init__(self) -> None:
-        self.synthesis_calls = 0
-
-    def classify_intent(self, *, message_text: str) -> IntentClassification:
+    def classify_intent(
+        self,
+        *,
+        message_text: str,
+        conversation_context: str | None = None,
+    ) -> IntentClassification:
         return IntentClassification(intent="general_support", confidence=0.8, reason="fake")
 
     def synthesize_faq_answer(
@@ -33,8 +33,7 @@ class FakeLLMProvider:
         faq_context: str | None = None,
         conversation_context: str | None = None,
     ) -> str:
-        self.synthesis_calls += 1
-        return f"LLM: {base_answer}"
+        return base_answer
 
 
 def build_session() -> Session:
@@ -44,31 +43,29 @@ def build_session() -> Session:
     return SessionLocal()
 
 
-def test_escalation_intake_creates_support_conversation() -> None:
-    """Test that escalation with order ID creates a support conversation."""
+def _build_service(session: Session) -> IntentFAQService:
+    provider = FakeLLMProvider()
+    return IntentFAQService(
+        faq_repository=FAQRepository(),
+        conversation_repository=ConversationRepository(session),
+        llm_provider=provider,
+        intent_graph=HybridIntentGraph(llm_provider=provider),
+        escalation_confidence_threshold=0.6,
+        llm_faq_synthesis_enabled=False,
+        retrieval_top_k=10,
+        max_context_chunks=5,
+        max_context_chars=2200,
+        min_chunk_score=0.10,
+        relative_score_floor=0.60,
+        synthesis_history_messages=6,
+        synthesis_history_chars=1200,
+    )
+
+
+def test_human_support_request_returns_regular_chat_handoff() -> None:
     session = build_session()
     try:
-        from app.models.support_conversation import SupportConversation
-        
-        provider = FakeLLMProvider()
-        support_repo = SupportRepository(session)
-        service = IntentFAQService(
-            faq_repository=FAQRepository(),
-            conversation_repository=ConversationRepository(session),
-            llm_provider=provider,
-            intent_graph=HybridIntentGraph(llm_provider=provider),
-            escalation_confidence_threshold=0.6,
-            llm_faq_synthesis_enabled=False,
-            retrieval_top_k=10,
-            max_context_chunks=5,
-            max_context_chars=2200,
-            min_chunk_score=0.10,
-            relative_score_floor=0.60,
-            synthesis_history_messages=6,
-            synthesis_history_chars=1200,
-            refund_repository=RefundRepository(session),
-            support_repository=support_repo,
-        )
+        service = _build_service(session)
 
         user = User(is_guest=False, is_active=True, is_verified=True)
         session.add(user)
@@ -77,120 +74,47 @@ def test_escalation_intake_creates_support_conversation() -> None:
 
         response = service.search_faq(
             user=user,
-            session_id="sess-escalation-support",
-            query_text="Order ord_12345 arrived damaged and I need a refund",
+            session_id="sess-human-handoff",
+            query_text="I need human support",
             intent="general_support",
         )
 
+        assert response.retrieval_mode == "handoff_ack"
         assert response.answer.source_id == "support-escalation"
-        assert "support/live" in response.answer.text.lower()
-        assert "Reference ID:" in response.answer.text
-
-        # Verify conversation was created
-        support_convos = session.query(SupportConversation).filter_by(customer_user_id=user.id).all()
-        assert len(support_convos) >= 1
-        assert support_convos[0].customer_user_id == user.id
-        assert support_convos[0].status == "open"
-        assert support_convos[0].priority == "high"
+        assert "support chat" in response.answer.text.lower()
+        assert "/support" in response.answer.text.lower()
+        assert response.citations == []
     finally:
         session.close()
 
 
-def test_escalation_intake_reuses_active_conversation() -> None:
-    """Test that escalation reuses an existing active conversation."""
+def test_escalation_followup_confirmation_returns_regular_chat_handoff() -> None:
     session = build_session()
     try:
-        provider = FakeLLMProvider()
-        support_repo = SupportRepository(session)
+        service = _build_service(session)
 
-        user = User(is_guest=False, is_active=True, is_verified=True)
+        user = User(is_guest=True, is_active=True, is_verified=False)
         session.add(user)
         session.commit()
         session.refresh(user)
 
-        # Pre-create an active conversation
-        existing_conv = support_repo.create_conversation(
-            conversation_id="sc_existing",
-            customer_user_id=user.id,
-            source_session_id="sess-old",
-            priority="normal",
-            escalation_reason_code="previous_issue",
-            escalation_reference_id=None,
-        )
-
-        service = IntentFAQService(
-            faq_repository=FAQRepository(),
-            conversation_repository=ConversationRepository(session),
-            llm_provider=provider,
-            intent_graph=HybridIntentGraph(llm_provider=provider),
-            escalation_confidence_threshold=0.6,
-            llm_faq_synthesis_enabled=False,
-            retrieval_top_k=10,
-            max_context_chunks=5,
-            max_context_chars=2200,
-            min_chunk_score=0.10,
-            relative_score_floor=0.60,
-            synthesis_history_messages=6,
-            synthesis_history_chars=1200,
-            refund_repository=RefundRepository(session),
-            support_repository=support_repo,
+        # Seed a previous assistant handoff prompt so confirmation-style follow-up is recognized.
+        service.conversation_repository.add_message(
+            session_id="sess-followup-handoff",
+            user_id=user.id,
+            role="assistant",
+            text="For human support, please open a regular support chat at /support so an admin can assist you directly.",
         )
 
         response = service.search_faq(
             user=user,
-            session_id="sess-new-escalation",
-            query_text="Order ord_99999 is missing",
+            session_id="sess-followup-handoff",
+            query_text="ok yes please",
             intent="general_support",
         )
 
-        assert "support/live/sc_existing" in response.answer.text
-
-    finally:
-        session.close()
-
-
-def test_escalation_intake_guest_user_no_conversation() -> None:
-    """Test that guest users cannot create support conversations even during escalation."""
-    session = build_session()
-    try:
-        from app.models.support_conversation import SupportConversation
-
-        provider = FakeLLMProvider()
-        support_repo = SupportRepository(session)
-        service = IntentFAQService(
-            faq_repository=FAQRepository(),
-            conversation_repository=ConversationRepository(session),
-            llm_provider=provider,
-            intent_graph=HybridIntentGraph(llm_provider=provider),
-            escalation_confidence_threshold=0.6,
-            llm_faq_synthesis_enabled=False,
-            retrieval_top_k=10,
-            max_context_chunks=5,
-            max_context_chars=2200,
-            min_chunk_score=0.10,
-            relative_score_floor=0.60,
-            synthesis_history_messages=6,
-            synthesis_history_chars=1200,
-            refund_repository=RefundRepository(session),
-            support_repository=support_repo,
-        )
-
-        guest_user = User(is_guest=True, is_active=True, is_verified=False)
-        session.add(guest_user)
-        session.commit()
-        session.refresh(guest_user)
-
-        # Use an escalation-style query with order ID
-        response = service.search_faq(
-            user=guest_user,
-            session_id="sess-guest-escalation",
-            query_text="Order ord_guest arrived broken and I need refund",
-            intent="general_support",
-        )
-
-        # Verify no conversation was created for guest, even though escalation occurred
-        support_convos = session.query(SupportConversation).filter_by(customer_user_id=guest_user.id).all()
-        assert len(support_convos) == 0
-
+        assert response.retrieval_mode == "handoff_ack"
+        assert "support chat" in response.answer.text.lower()
+        assert "/support" in response.answer.text.lower()
     finally:
         session.close()

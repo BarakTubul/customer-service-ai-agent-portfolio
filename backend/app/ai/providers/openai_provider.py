@@ -25,7 +25,13 @@ class OpenAILLMProvider:
     def __init__(self, *, api_key: str, model: str, temperature: float = 0.0) -> None:
         self.model = ChatOpenAI(api_key=api_key, model=model, temperature=temperature)
 
-    def classify_intent(self, *, message_text: str) -> IntentClassification:
+    def classify_intent(
+        self,
+        *,
+        message_text: str,
+        conversation_context: str | None = None,
+    ) -> IntentClassification:
+        history_block = conversation_context.strip() if conversation_context else "No prior messages"
         structured = self.model.with_structured_output(_IntentClassificationResult)
         result = structured.invoke(
             [
@@ -33,12 +39,13 @@ class OpenAILLMProvider:
                     "role": "system",
                     "content": (
                         "You classify customer support intents."
+                        "Use conversation history only to resolve references."
                         "Return one intent label and confidence."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": message_text,
+                    "content": f"Conversation context:\n{history_block}\n\nLatest user message:\n{message_text}",
                 },
             ]
         )
@@ -62,9 +69,11 @@ class OpenAILLMProvider:
                 {
                     "role": "system",
                     "content": (
-                        "Rewrite support answers to be concise, clear, and policy-safe."
-                        "Use prior conversation only to resolve user references."
-                        "Use only the provided FAQ context and do not invent facts."
+                        "Rewrite support answers to be concise, clear, and policy-safe. "
+                        "Answer only the latest question, not the conversation history. "
+                        "Use prior conversation only to resolve references like 'it', 'that', or 'same issue'. "
+                        "Do not summarize prior turns, do not say 'we discussed', and do not mention source labels. "
+                        "Use only the provided FAQ context and do not invent facts. "
                         "If the context is incomplete, respond conservatively and say so."
                     ),
                 },
@@ -73,7 +82,6 @@ class OpenAILLMProvider:
                     "content": (
                         f"Question: {question}\n"
                         f"Conversation context:\n{history_block}\n"
-                        f"Source label: {source_label}\n"
                         f"Base answer: {base_answer}\n"
                         f"FAQ context:\n{context_block}"
                     ),

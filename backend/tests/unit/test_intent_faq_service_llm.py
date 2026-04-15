@@ -9,7 +9,6 @@ from app.db.base import Base
 from app.models.user import User
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.faq_repository import FAQRepository
-from app.repositories.refund_repository import RefundRepository
 from app.services.intent_faq_service import IntentFAQService
 
 
@@ -20,7 +19,12 @@ class FakeLLMProvider:
     def __init__(self) -> None:
         self.synthesis_calls = 0
 
-    def classify_intent(self, *, message_text: str) -> IntentClassification:
+    def classify_intent(
+        self,
+        *,
+        message_text: str,
+        conversation_context: str | None = None,
+    ) -> IntentClassification:
         return IntentClassification(intent="general_support", confidence=0.8, reason="fake")
 
     def synthesize_faq_answer(
@@ -37,7 +41,12 @@ class FakeLLMProvider:
 
 
 class LowConfidenceLLMProvider(FakeLLMProvider):
-    def classify_intent(self, *, message_text: str) -> IntentClassification:
+    def classify_intent(
+        self,
+        *,
+        message_text: str,
+        conversation_context: str | None = None,
+    ) -> IntentClassification:
         return IntentClassification(intent="general_support", confidence=0.2, reason="low_confidence")
 
 
@@ -431,12 +440,12 @@ def test_human_help_intent_returns_escalation_clarification() -> None:
         assert response.route == "clarify"
         assert response.requires_clarification is True
         assert response.clarification_question is not None
-        assert "manager review flow" in response.clarification_question.lower()
+        assert "support chat" in response.clarification_question.lower()
     finally:
         session.close()
 
 
-def test_escalation_intake_message_with_order_id_bypasses_faq() -> None:
+def test_human_support_request_in_search_returns_handoff_ack() -> None:
     session = build_session()
     try:
         provider = FakeLLMProvider()
@@ -464,59 +473,14 @@ def test_escalation_intake_message_with_order_id_bypasses_faq() -> None:
         response = service.search_faq(
             user=user,
             session_id="sess-escalation-intake",
-            query_text="ord_d6434aad5a it arrived late",
+            query_text="I need human support now",
             intent="order_status",
         )
 
-        assert response.retrieval_mode == "handoff_intake"
-        assert "captured your escalation" in response.answer.text.lower()
-        assert "order ord_d6434aad5a" in response.answer.text.lower()
+        assert response.retrieval_mode == "handoff_ack"
+        assert "support chat" in response.answer.text.lower()
+        assert "/support" in response.answer.text.lower()
         assert response.citations == []
-    finally:
-        session.close()
-
-
-def test_escalation_intake_creates_manual_review_queue_record() -> None:
-    session = build_session()
-    try:
-        provider = FakeLLMProvider()
-        refund_repository = RefundRepository(session)
-        service = IntentFAQService(
-            faq_repository=FAQRepository(),
-            conversation_repository=ConversationRepository(session),
-            llm_provider=provider,
-            intent_graph=HybridIntentGraph(llm_provider=provider),
-            escalation_confidence_threshold=0.6,
-            llm_faq_synthesis_enabled=True,
-            retrieval_top_k=10,
-            max_context_chunks=5,
-            max_context_chars=2200,
-            min_chunk_score=0.10,
-            relative_score_floor=0.60,
-            synthesis_history_messages=6,
-            synthesis_history_chars=1200,
-            refund_repository=refund_repository,
-        )
-
-        user = User(is_guest=False, is_active=True, is_verified=True)
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-
-        response = service.search_faq(
-            user=user,
-            session_id="sess-escalation-queue",
-            query_text="ord_d6434aad5a it was delayed",
-            intent="order_status",
-        )
-
-        assert response.retrieval_mode == "handoff_intake"
-        assert "reference id" in response.answer.text.lower()
-
-        queued = refund_repository.list_pending_manual_review(limit=10)
-        assert len(queued) == 1
-        assert queued[0].order_id == "ord_d6434aad5a"
-        assert queued[0].escalation_status == "queued"
     finally:
         session.close()
 
@@ -571,7 +535,7 @@ def test_escalation_follow_up_confirmation_keeps_handoff_prompt() -> None:
 
         assert follow_up.route == "clarify"
         assert follow_up.clarification_question is not None
-        assert "share your order id" in follow_up.clarification_question.lower()
+        assert "support chat" in follow_up.clarification_question.lower()
     finally:
         session.close()
 
@@ -594,7 +558,6 @@ def test_direct_human_request_uses_clarify_handoff() -> None:
             relative_score_floor=0.60,
             synthesis_history_messages=6,
             synthesis_history_chars=1200,
-            refund_repository=RefundRepository(session),
         )
 
         user = User(is_guest=True, is_active=True, is_verified=False)
@@ -611,7 +574,7 @@ def test_direct_human_request_uses_clarify_handoff() -> None:
 
         assert response.route == "clarify"
         assert response.clarification_question is not None
-        assert "manager review flow" in response.clarification_question.lower()
+        assert "support chat" in response.clarification_question.lower()
     finally:
         session.close()
 
@@ -634,7 +597,6 @@ def test_need_assistance_now_uses_clarify_handoff() -> None:
             relative_score_floor=0.60,
             synthesis_history_messages=6,
             synthesis_history_chars=1200,
-            refund_repository=RefundRepository(session),
         )
 
         user = User(is_guest=True, is_active=True, is_verified=False)
@@ -651,7 +613,7 @@ def test_need_assistance_now_uses_clarify_handoff() -> None:
 
         assert response.route == "clarify"
         assert response.clarification_question is not None
-        assert "share your order id" in response.clarification_question.lower()
+        assert "support chat" in response.clarification_question.lower()
     finally:
         session.close()
 
