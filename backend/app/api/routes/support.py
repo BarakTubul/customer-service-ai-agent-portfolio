@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import asyncio
+from collections import defaultdict
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
 from app.api.dependencies import get_current_user
 from app.api.dependencies import get_support_chat_service
 from app.api.dependencies import require_admin_user
+from app.core.security import decode_access_token
+from app.db.session import get_db
 from app.models.user import User
 from app.schemas.support import (
     SupportConversationCreateRequest,
@@ -14,9 +20,41 @@ from app.schemas.support import (
     SupportMessageListResponse,
     SupportMessageResponse,
 )
+from app.repositories.support_repository import SupportRepository
+from app.repositories.user_repository import UserRepository
 from app.services.support_chat_service import SupportChatService
 
 router = APIRouter()
+
+
+class SupportWebSocketManager:
+    def __init__(self) -> None:
+        self._rooms: dict[str, set[WebSocket]] = defaultdict(set)
+
+    async def connect(self, conversation_id: str, websocket: WebSocket) -> None:
+        self._rooms[conversation_id].add(websocket)
+
+    def disconnect(self, conversation_id: str, websocket: WebSocket) -> None:
+        room = self._rooms.get(conversation_id)
+        if room is None:
+            return
+        room.discard(websocket)
+        if not room:
+            self._rooms.pop(conversation_id, None)
+
+    async def broadcast_json(self, conversation_id: str, payload: dict[str, object]) -> None:
+        room = list(self._rooms.get(conversation_id, set()))
+        if not room:
+            return
+
+        for websocket in room:
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                self.disconnect(conversation_id, websocket)
+
+
+support_ws_manager = SupportWebSocketManager()
 
 
 def _conversation_to_response(row) -> SupportConversationResponse:
@@ -46,6 +84,30 @@ def _message_to_response(row) -> SupportMessageResponse:
         delivered_at=row.delivered_at,
         read_at=row.read_at,
     )
+
+
+def _authenticate_websocket_user(websocket: WebSocket) -> User | None:
+    token = websocket.query_params.get("token") or websocket.cookies.get("access_token")
+    if not token:
+        return None
+
+    try:
+        payload = decode_access_token(token)
+        subject = payload.get("sub")
+        if subject is None:
+            return None
+    except Exception:
+        return None
+
+    db_generator = get_db()
+    db = next(db_generator)
+    try:
+        user = UserRepository(db).get_by_id(int(subject))
+        if user is None or user.is_guest:
+            return None
+        return user
+    finally:
+        db_generator.close()
 
 
 @router.post("/support/conversations", response_model=SupportConversationResponse)
@@ -145,3 +207,126 @@ def close_support_conversation(
 ) -> SupportConversationResponse:
     row = support_chat_service.close_conversation(admin_user=admin_user, conversation_id=conversation_id)
     return _conversation_to_response(row)
+
+
+@router.websocket("/ws/support/{conversation_id}")
+async def stream_support_conversation(websocket: WebSocket, conversation_id: str) -> None:
+    token = websocket.query_params.get("token") or websocket.cookies.get("access_token")
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    try:
+        payload = decode_access_token(token)
+        subject = payload.get("sub")
+        if subject is None:
+            await websocket.close(code=1008)
+            return
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
+    db_generator = get_db()
+    db = next(db_generator)
+    try:
+        user = UserRepository(db).get_by_id(int(subject))
+        if user is None or user.is_guest:
+            await websocket.close(code=1008)
+            return
+
+        support_chat_service = SupportChatService(SupportRepository(db))
+        conversation = support_chat_service.get_conversation(current_user=user, conversation_id=conversation_id)
+        await websocket.accept()
+        await support_ws_manager.connect(conversation_id, websocket)
+
+        snapshot = {
+            "type": "conversation.snapshot",
+            "conversation_id": conversation_id,
+            "payload": {
+                "conversation": _conversation_to_response(conversation).model_dump(mode="json"),
+                "messages": [
+                    _message_to_response(row).model_dump(mode="json")
+                    for row in support_chat_service.list_messages(
+                        current_user=user,
+                        conversation_id=conversation_id,
+                        limit=100,
+                    )
+                ],
+            },
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        await websocket.send_json(snapshot)
+
+        while True:
+            try:
+                event = await websocket.receive_json()
+            except WebSocketDisconnect:
+                break
+
+            event_type = event.get("type")
+            if event_type != "message.send":
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "conversation_id": conversation_id,
+                        "payload": {"message": "Unsupported websocket event"},
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
+                continue
+
+            payload = event.get("payload") or {}
+            body = str(payload.get("body", "")).strip()
+            if not body:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "conversation_id": conversation_id,
+                        "payload": {"message": "Message body is required"},
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
+                continue
+
+            try:
+                message_row = support_chat_service.send_message(
+                    current_user=user,
+                    conversation_id=conversation_id,
+                    body=body,
+                )
+                updated_conversation = support_chat_service.get_conversation(
+                    current_user=user,
+                    conversation_id=conversation_id,
+                )
+            except Exception as exc:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "conversation_id": conversation_id,
+                        "payload": {"message": str(exc)},
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
+                continue
+
+            await support_ws_manager.broadcast_json(
+                conversation_id,
+                {
+                    "type": "conversation.updated",
+                    "conversation_id": conversation_id,
+                    "payload": _conversation_to_response(updated_conversation).model_dump(mode="json"),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+            await support_ws_manager.broadcast_json(
+                conversation_id,
+                {
+                    "type": "message.new",
+                    "conversation_id": conversation_id,
+                    "payload": _message_to_response(message_row).model_dump(mode="json"),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+    finally:
+        support_ws_manager.disconnect(conversation_id, websocket)
+        db_generator.close()

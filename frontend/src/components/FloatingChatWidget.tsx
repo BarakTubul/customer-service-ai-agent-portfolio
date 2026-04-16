@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -13,6 +13,30 @@ interface Message {
   content: string;
   citations?: t.FAQCitation[];
 }
+
+interface SupportMessage {
+  message_id: string;
+  sender_role: 'customer' | 'admin' | 'system' | 'bot';
+  body: string;
+  created_at: string;
+}
+
+interface SupportConversationSnapshot {
+  conversation_id: string;
+  customer_user_id: number;
+  status: string;
+  priority: string;
+  assigned_admin_user_id: number | null;
+  source_session_id: string | null;
+  escalation_reason_code: string | null;
+  escalation_reference_id: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+}
+
+const WELCOME_MESSAGE =
+  'Welcome! You can ask any question about the site, including orders, refunds, or account issues. You can also ask for human assistance at any time.';
 
 function MarkdownContent({ content, isUser }: { content: string; isUser: boolean }) {
   const textClass = isUser ? 'text-white' : 'text-gray-800';
@@ -122,15 +146,35 @@ function inferIntentLocally(value: string): string | null {
 
 export function FloatingChatWidget() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { sessionId } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [mode, setMode] = useState<'assistant' | 'support'>('assistant');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [loadingDots, setLoadingDots] = useState(1);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'assistant', content: WELCOME_MESSAGE, citations: [] },
+  ]);
   const [error, setError] = useState('');
+  const [supportConversation, setSupportConversation] = useState<SupportConversationSnapshot | null>(null);
+  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
+  const [supportInput, setSupportInput] = useState('');
+  const [supportStatus, setSupportStatus] = useState('Human support is ready when you need it.');
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [supportSending, setSupportSending] = useState(false);
+  const [supportError, setSupportError] = useState('');
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const supportSocketRef = useRef<WebSocket | null>(null);
+  const supportMessageIds = useRef(new Set<string>());
+
+  const supportTitle = useMemo(() => {
+    if (!supportConversation) {
+      return 'Human Support';
+    }
+    return supportConversation.assigned_admin_user_id ? 'Human Support' : 'Human Support';
+  }, [supportConversation]);
 
   useEffect(() => {
     if (!loading) {
@@ -159,6 +203,159 @@ export function FloatingChatWidget() {
 
     container.scrollTop = container.scrollHeight;
   }, [messages, loading, isOpen]);
+
+  useEffect(() => {
+    if (location.pathname === '/support') {
+      setMode('support');
+      setIsOpen(true);
+      return;
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const openHumanSupport = () => {
+      setMode('support');
+      setIsOpen(true);
+      setError('');
+      setSupportError('');
+      navigate('/support');
+    };
+
+    window.addEventListener('support-chat-open', openHumanSupport as EventListener);
+    return () => {
+      window.removeEventListener('support-chat-open', openHumanSupport as EventListener);
+    };
+  }, [navigate]);
+
+  useEffect(() => {
+    if (mode !== 'support' || !isOpen) {
+      return;
+    }
+
+    let cancelled = false;
+    supportSocketRef.current?.close();
+    supportSocketRef.current = null;
+    supportMessageIds.current.clear();
+    setSupportLoading(true);
+    setSupportError('');
+
+    const bootstrapSupport = async () => {
+      try {
+        setSupportConversation(null);
+        setSupportMessages([]);
+        setSupportInput('');
+        setSupportStatus('Connecting you to human support...');
+        setSupportError('');
+        const conversation = await apiClient.createSupportConversation({
+          source_session_id: sessionId,
+          priority: 'normal',
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setSupportConversation(conversation);
+        setSupportStatus(
+          conversation.status === 'closed'
+            ? 'This support conversation is closed.'
+            : conversation.assigned_admin_user_id
+              ? 'An admin is assigned and can respond here.'
+              : 'Your request is in the support queue. An admin will join soon.'
+        );
+
+        const token = apiClient.getAccessToken();
+        const wsBase = 'ws://localhost:8000/api/v1/ws/support';
+        const wsUrl = token
+          ? `${wsBase}/${conversation.conversation_id}?token=${encodeURIComponent(token)}`
+          : `${wsBase}/${conversation.conversation_id}`;
+        const socket = new WebSocket(wsUrl);
+        supportSocketRef.current = socket;
+
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as {
+              type: string;
+              payload?: unknown;
+            };
+
+            if (data.type === 'conversation.snapshot') {
+              const payload = data.payload as { conversation: SupportConversationSnapshot; messages: SupportMessage[] };
+              setSupportConversation(payload.conversation);
+              setSupportMessages(payload.messages || []);
+              payload.messages?.forEach((message) => supportMessageIds.current.add(message.message_id));
+              setSupportLoading(false);
+              return;
+            }
+
+            if (data.type === 'conversation.updated') {
+              const payload = data.payload as SupportConversationSnapshot;
+              setSupportConversation(payload);
+              setSupportStatus(
+                payload.status === 'closed'
+                  ? 'This support conversation is closed.'
+                  : payload.assigned_admin_user_id
+                    ? 'An admin is assigned and can respond here.'
+                    : 'Your request is in the support queue. An admin will join soon.'
+              );
+              return;
+            }
+
+            if (data.type === 'message.new') {
+              const payload = data.payload as SupportMessage;
+              if (!supportMessageIds.current.has(payload.message_id)) {
+                supportMessageIds.current.add(payload.message_id);
+                setSupportMessages((current) => [...current, payload]);
+              }
+              return;
+            }
+
+            if (data.type === 'error') {
+              const payload = data.payload as { message?: string } | undefined;
+              setSupportError(payload?.message || 'Support chat error');
+            }
+          } catch (err) {
+            setSupportError(err instanceof Error ? err.message : 'Failed to read support message');
+          }
+        };
+
+        socket.onerror = () => {
+          setSupportError('Support websocket connection failed');
+        };
+
+        socket.onclose = () => {
+          if (!cancelled) {
+            setSupportLoading(false);
+          }
+        };
+      } catch (err) {
+        if (!cancelled) {
+          setSupportError(err instanceof Error ? err.message : 'Failed to open human support');
+          setSupportLoading(false);
+        }
+      }
+    };
+
+    void bootstrapSupport();
+
+    return () => {
+      cancelled = true;
+      supportSocketRef.current?.close();
+      supportSocketRef.current = null;
+    };
+  }, [mode, isOpen, sessionId]);
+
+  useEffect(() => {
+    if (mode !== 'support' || !isOpen) {
+      return;
+    }
+
+    if (!scrollContainerRef.current) {
+      return;
+    }
+
+    scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+  }, [supportMessages, mode, isOpen]);
 
   if (location.pathname === '/chat') {
     return null;
@@ -261,12 +458,54 @@ export function FloatingChatWidget() {
     }
   };
 
+  const sendSupportMessage = (event: FormEvent) => {
+    event.preventDefault();
+    const body = supportInput.trim();
+    if (!body || supportLoading || supportSending) {
+      return;
+    }
+
+    setSupportError('');
+    setSupportInput('');
+    setSupportSending(true);
+
+    const socket = supportSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setSupportError('Support chat is not connected yet. Please try again in a moment.');
+      setSupportSending(false);
+      setSupportInput(body);
+      return;
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: 'message.send',
+        payload: {
+          client_message_id: `client-${Date.now().toString(36)}`,
+          body,
+        },
+      })
+    );
+    setSupportSending(false);
+  };
+
+  const enterHumanSupport = () => {
+    setMode('support');
+    setIsOpen(true);
+    setError('');
+    setSupportError('');
+    navigate('/support');
+  };
+
   return (
     <div className="fixed bottom-6 right-6 z-40">
       {isOpen ? (
         <Card className="w-[360px] max-w-[calc(100vw-2rem)] shadow-2xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-gray-900">Support Assistant</h3>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">{mode === 'support' ? supportTitle : 'Support Assistant'}</h3>
+              {mode === 'support' && <p className="text-[11px] text-gray-500">Human handoff chat</p>}
+            </div>
             <button
               type="button"
               className="text-gray-500 hover:text-gray-800 text-sm"
@@ -276,68 +515,142 @@ export function FloatingChatWidget() {
             </button>
           </div>
 
-          <div
-            ref={scrollContainerRef}
-            className="h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50 space-y-2 mb-3"
-          >
-            {messages.length === 0 ? (
-              <p className="text-xs text-gray-500">Ask about refunds, orders, or account support.</p>
-            ) : (
-              messages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`text-xs p-2 rounded-md ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white ml-8'
-                      : 'bg-white text-gray-800 border border-gray-200 mr-8'
-                  }`}
-                >
-                  <MarkdownContent content={msg.content} isUser={msg.role === 'user'} />
-                  {msg.citations && msg.citations.length > 0 && (
-                    <p className="mt-1 opacity-75">Source: {msg.citations[0].source_id}</p>
-                  )}
-                </div>
-              ))
-            )}
+          {mode === 'assistant' ? (
+            <>
+              <div
+                ref={scrollContainerRef}
+                className="h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50 space-y-2 mb-3"
+              >
+                {messages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`text-xs p-2 rounded-md ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white ml-8'
+                        : idx === 0
+                          ? 'bg-blue-50 text-gray-800 border border-blue-100 mr-8'
+                          : 'bg-white text-gray-800 border border-gray-200 mr-8'
+                    }`}
+                  >
+                    <MarkdownContent content={msg.content} isUser={msg.role === 'user'} />
+                    {msg.citations && msg.citations.length > 0 && (
+                      <p className="mt-1 opacity-75">Source: {msg.citations[0].source_id}</p>
+                    )}
+                    {msg.role === 'assistant' && msg.content.toLowerCase().includes('/support') && (
+                      <button
+                        type="button"
+                        className="mt-2 inline-flex items-center rounded-md border border-blue-200 bg-white px-3 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-50"
+                        onClick={enterHumanSupport}
+                      >
+                        Open human support
+                      </button>
+                    )}
+                  </div>
+                ))}
 
-            {loading && (
-              <div className="text-xs p-2 rounded-md bg-white text-gray-700 border border-gray-200 mr-8 inline-flex items-center gap-2">
-                <span>Thinking</span>
-                <span className="inline-flex items-center gap-1">
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full bg-gray-400 transition-opacity ${
-                      loadingDots >= 1 ? 'opacity-100' : 'opacity-30'
-                    }`}
-                  />
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full bg-gray-400 transition-opacity ${
-                      loadingDots >= 2 ? 'opacity-100' : 'opacity-30'
-                    }`}
-                  />
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full bg-gray-400 transition-opacity ${
-                      loadingDots >= 3 ? 'opacity-100' : 'opacity-30'
-                    }`}
-                  />
-                </span>
+                {loading && (
+                  <div className="text-xs p-2 rounded-md bg-white text-gray-700 border border-gray-200 mr-8 inline-flex items-center gap-2">
+                    <span>Thinking</span>
+                    <span className="inline-flex items-center gap-1">
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full bg-gray-400 transition-opacity ${
+                          loadingDots >= 1 ? 'opacity-100' : 'opacity-30'
+                        }`}
+                      />
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full bg-gray-400 transition-opacity ${
+                          loadingDots >= 2 ? 'opacity-100' : 'opacity-30'
+                        }`}
+                      />
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full bg-gray-400 transition-opacity ${
+                          loadingDots >= 3 ? 'opacity-100' : 'opacity-30'
+                        }`}
+                      />
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+              {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
 
-          <form onSubmit={sendMessage} className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask a question..."
-              disabled={isBusy}
-              className="text-sm"
-            />
-            <Button type="submit" size="sm" disabled={isBusy || !input.trim()}>
-              {isBusy ? '...' : 'Send'}
-            </Button>
-          </form>
+              <form onSubmit={sendMessage} className="flex gap-2">
+                <Input
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder="Ask a question..."
+                  disabled={isBusy}
+                  className="text-sm"
+                />
+                <Button type="submit" size="sm" disabled={isBusy || !input.trim()}>
+                  {isBusy ? '...' : 'Send'}
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              <div
+                ref={scrollContainerRef}
+                className="h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50 space-y-2 mb-3"
+              >
+                {supportMessages.length === 0 && (
+                  <div className="text-xs p-2 rounded-md bg-blue-50 text-gray-800 border border-blue-100 mr-8">
+                    {supportLoading ? 'Connecting you to human support...' : supportStatus}
+                  </div>
+                )}
+
+                {supportMessages.map((msg) => {
+                  const isCustomer = msg.sender_role === 'customer';
+                  const isSystem = msg.sender_role === 'system' || msg.sender_role === 'bot';
+                  return (
+                    <div
+                      key={msg.message_id}
+                      className={`text-xs p-2 rounded-md ${
+                        isCustomer
+                          ? 'bg-blue-600 text-white ml-8'
+                          : isSystem
+                            ? 'bg-amber-50 text-gray-800 border border-amber-100 mr-8'
+                            : 'bg-white text-gray-800 border border-gray-200 mr-8'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1 text-[11px] opacity-75">
+                        <span>{isCustomer ? 'You' : isSystem ? 'System' : 'Admin'}</span>
+                        <span>{new Date(msg.created_at).toLocaleString()}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap leading-relaxed">{msg.body}</p>
+                    </div>
+                  );
+                })}
+
+                {supportLoading && supportMessages.length > 0 && (
+                  <div className="text-xs p-2 rounded-md bg-white text-gray-700 border border-gray-200 mr-8 inline-flex items-center gap-2">
+                    <span>Connecting</span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 opacity-100" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 opacity-60" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 opacity-30" />
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-2 text-xs text-gray-600">{supportStatus}</div>
+              {supportError && <p className="text-xs text-red-600 mb-2">{supportError}</p>}
+
+              <form onSubmit={sendSupportMessage} className="flex gap-2">
+                <Input
+                  value={supportInput}
+                  onChange={(event) => setSupportInput(event.target.value)}
+                  placeholder="Write a message to the admin..."
+                  disabled={supportLoading || supportSending}
+                  className="text-sm"
+                />
+                <Button type="submit" size="sm" disabled={supportLoading || supportSending || !supportInput.trim()}>
+                  {supportLoading || supportSending ? '...' : 'Send'}
+                </Button>
+              </form>
+            </>
+          )}
         </Card>
       ) : (
         <Button onClick={() => setIsOpen(true)} className="rounded-full shadow-lg px-5 py-3">

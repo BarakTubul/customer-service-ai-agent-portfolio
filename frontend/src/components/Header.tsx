@@ -16,11 +16,15 @@ export function Header() {
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
   const navItems = user?.is_admin
-    ? [{ label: 'Manager Reviews', path: '/manager/refunds' }]
+    ? [
+        { label: 'Manager Reviews', path: '/manager/refunds' },
+        { label: 'Support Inbox', path: '/manager/support' },
+      ]
     : [
         { label: 'My Orders', path: '/orders' },
         { label: 'Order', path: '/order' },
         { label: 'Refunds', path: '/refund' },
+        { label: 'Support', path: '/support' },
       ];
 
   useEffect(() => {

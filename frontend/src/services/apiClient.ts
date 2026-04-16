@@ -251,6 +251,85 @@ class APIClient {
     return response.data;
   }
 
+  // Support endpoints
+  async createSupportConversation(
+    payload: t.SupportConversationCreateRequest
+  ): Promise<t.SupportConversationResponse> {
+    const response = await this.client.post<t.SupportConversationResponse>('/support/conversations', {
+      source_session_id: payload.source_session_id || undefined,
+      escalation_reason_code: payload.escalation_reason_code || undefined,
+      escalation_reference_id: payload.escalation_reference_id || undefined,
+      priority: payload.priority || 'normal',
+    });
+    return response.data;
+  }
+
+  async getSupportConversation(conversationId: string): Promise<t.SupportConversationResponse> {
+    const response = await this.client.get<t.SupportConversationResponse>(
+      `/support/conversations/${conversationId}`
+    );
+    return response.data;
+  }
+
+  async listSupportMessages(
+    conversationId: string,
+    limit = 50
+  ): Promise<t.SupportMessageListResponse> {
+    const response = await this.client.get<t.SupportMessageListResponse>(
+      `/support/conversations/${conversationId}/messages`,
+      { params: { limit } }
+    );
+    return response.data;
+  }
+
+  async sendSupportMessage(
+    conversationId: string,
+    body: string
+  ): Promise<t.SupportMessageResponse> {
+    const response = await this.client.post<t.SupportMessageResponse>(
+      `/support/conversations/${conversationId}/messages`,
+      { body }
+    );
+    return response.data;
+  }
+
+  async listSupportQueue(limit = 50): Promise<t.SupportConversationListResponse> {
+    const response = await this.client.get<t.SupportConversationListResponse>(
+      '/admin/support/conversations/queue',
+      { params: { limit } }
+    );
+    return response.data;
+  }
+
+  async listAssignedSupportConversations(limit = 50): Promise<t.SupportConversationListResponse> {
+    const response = await this.client.get<t.SupportConversationListResponse>(
+      '/admin/support/conversations/assigned',
+      { params: { limit } }
+    );
+    return response.data;
+  }
+
+  async claimSupportConversation(conversationId: string): Promise<t.SupportConversationResponse> {
+    const response = await this.client.post<t.SupportConversationResponse>(
+      `/admin/support/conversations/${conversationId}/claim`
+    );
+    return response.data;
+  }
+
+  async releaseSupportConversation(conversationId: string): Promise<t.SupportConversationResponse> {
+    const response = await this.client.post<t.SupportConversationResponse>(
+      `/admin/support/conversations/${conversationId}/release`
+    );
+    return response.data;
+  }
+
+  async closeSupportConversation(conversationId: string): Promise<t.SupportConversationResponse> {
+    const response = await this.client.post<t.SupportConversationResponse>(
+      `/admin/support/conversations/${conversationId}/close`
+    );
+    return response.data;
+  }
+
   async getConversationContext(sessionId: string): Promise<t.ConversationMessage[]> {
     const response = await this.client.get<t.ConversationMessage[]>(
       `/conversations/${sessionId}/context`
