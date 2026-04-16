@@ -129,8 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const intervalId = window.setInterval(() => {
-      void checkSession();
-    }, 15000);
+      if (document.visibilityState === 'visible') {
+        void checkSession();
+      }
+    }, 60000);
 
     const handleFocus = () => {
       void checkSession();

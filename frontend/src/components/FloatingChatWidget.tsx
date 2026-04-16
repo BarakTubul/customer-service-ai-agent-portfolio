@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -146,7 +146,6 @@ function inferIntentLocally(value: string): string | null {
 
 export function FloatingChatWidget() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { sessionId } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<'assistant' | 'support'>('assistant');
@@ -218,14 +217,13 @@ export function FloatingChatWidget() {
       setIsOpen(true);
       setError('');
       setSupportError('');
-      navigate('/support');
     };
 
     window.addEventListener('support-chat-open', openHumanSupport as EventListener);
     return () => {
       window.removeEventListener('support-chat-open', openHumanSupport as EventListener);
     };
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     if (mode !== 'support' || !isOpen) {
@@ -494,7 +492,6 @@ export function FloatingChatWidget() {
     setIsOpen(true);
     setError('');
     setSupportError('');
-    navigate('/support');
   };
 
   return (
@@ -653,9 +650,24 @@ export function FloatingChatWidget() {
           )}
         </Card>
       ) : (
-        <Button onClick={() => setIsOpen(true)} className="rounded-full shadow-lg px-5 py-3">
-          Chat
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => {
+              setMode('assistant');
+              setIsOpen(true);
+            }}
+            className="rounded-full shadow-lg px-5 py-3"
+          >
+            FAQ Chat
+          </Button>
+          <Button
+            onClick={enterHumanSupport}
+            variant="outline"
+            className="rounded-full shadow-lg px-5 py-3 bg-white"
+          >
+            Human
+          </Button>
+        </div>
       )}
     </div>
   );

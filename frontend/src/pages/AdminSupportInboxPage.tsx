@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { Alert, Button, Card, Input } from '@/components/UI';
 import { apiClient } from '@/services/apiClient';
@@ -43,6 +43,8 @@ export function AdminSupportInboxPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [threadLoading, setThreadLoading] = useState(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  const messageIdsRef = useRef(new Set<string>());
 
   const selectedConversationState = useMemo(() => {
     if (!selectedConversation) {
@@ -91,6 +93,7 @@ export function AdminSupportInboxPage() {
           created_at: item.created_at,
         }))
       );
+      messageIdsRef.current = new Set(messageResponse.items.map((item) => item.message_id));
       setSelectedConversationId(conversationId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load support conversation');
@@ -107,20 +110,76 @@ export function AdminSupportInboxPage() {
     if (!selectedConversationId) {
       return;
     }
-    void loadThread(selectedConversationId);
-  }, [selectedConversationId]);
+    socketRef.current?.close();
+    messageIdsRef.current.clear();
+    setThreadLoading(true);
 
-  useEffect(() => {
-    if (!selectedConversationId) {
-      return;
-    }
+    const token = apiClient.getAccessToken();
+    const wsBase = 'ws://localhost:8000/api/v1/ws/support';
+    const wsUrl = token
+      ? `${wsBase}/${selectedConversationId}?token=${encodeURIComponent(token)}`
+      : `${wsBase}/${selectedConversationId}`;
 
-    const intervalId = window.setInterval(() => {
-      void loadInbox();
-      void loadThread(selectedConversationId);
-    }, 4000);
+    const socket = new WebSocket(wsUrl);
+    socketRef.current = socket;
 
-    return () => window.clearInterval(intervalId);
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as {
+          type: string;
+          payload?: unknown;
+        };
+
+        if (data.type === 'conversation.snapshot') {
+          const payload = data.payload as {
+            conversation: t.SupportConversationResponse;
+            messages: SupportThreadMessage[];
+          };
+          setSelectedConversation(payload.conversation);
+          setMessages(payload.messages || []);
+          messageIdsRef.current = new Set((payload.messages || []).map((item) => item.message_id));
+          setThreadLoading(false);
+          return;
+        }
+
+        if (data.type === 'conversation.updated') {
+          const payload = data.payload as t.SupportConversationResponse;
+          setSelectedConversation(payload);
+          void loadInbox();
+          return;
+        }
+
+        if (data.type === 'message.new') {
+          const payload = data.payload as SupportThreadMessage;
+          if (!messageIdsRef.current.has(payload.message_id)) {
+            messageIdsRef.current.add(payload.message_id);
+            setMessages((current) => [...current, payload]);
+          }
+          return;
+        }
+
+        if (data.type === 'error') {
+          const payload = data.payload as { message?: string } | undefined;
+          setError(payload?.message || 'Support websocket error');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to parse support websocket event');
+      }
+    };
+
+    socket.onerror = () => {
+      setError('Support websocket connection failed. Using manual reload fallback.');
+      setThreadLoading(false);
+    };
+
+    socket.onclose = () => {
+      setThreadLoading(false);
+    };
+
+    return () => {
+      socket.close();
+      socketRef.current = null;
+    };
   }, [selectedConversationId]);
 
   const handleSelectConversation = (conversationId: string, section: InboxSection) => {
@@ -198,7 +257,6 @@ export function AdminSupportInboxPage() {
       await apiClient.sendSupportMessage(selectedConversation.conversation_id, input.trim());
       setInput('');
       setSuccess('Reply sent.');
-      await loadThread(selectedConversation.conversation_id);
       await loadInbox();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send reply');

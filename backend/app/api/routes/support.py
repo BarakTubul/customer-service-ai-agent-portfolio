@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections import defaultdict
 from datetime import UTC, datetime
 
@@ -143,7 +142,7 @@ def list_support_messages(
 
 
 @router.post("/support/conversations/{conversation_id}/messages", response_model=SupportMessageResponse)
-def send_support_message(
+async def send_support_message(
     conversation_id: str,
     payload: SupportMessageCreateRequest,
     current_user: User = Depends(get_current_user),
@@ -153,6 +152,29 @@ def send_support_message(
         current_user=current_user,
         conversation_id=conversation_id,
         body=payload.body,
+    )
+    updated_conversation = support_chat_service.get_conversation(
+        current_user=current_user,
+        conversation_id=conversation_id,
+    )
+
+    await support_ws_manager.broadcast_json(
+        conversation_id,
+        {
+            "type": "conversation.updated",
+            "conversation_id": conversation_id,
+            "payload": _conversation_to_response(updated_conversation).model_dump(mode="json"),
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
+    await support_ws_manager.broadcast_json(
+        conversation_id,
+        {
+            "type": "message.new",
+            "conversation_id": conversation_id,
+            "payload": _message_to_response(row).model_dump(mode="json"),
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
     )
     return _message_to_response(row)
 
@@ -180,32 +202,59 @@ def list_assigned_support_conversations(
 
 
 @router.post("/admin/support/conversations/{conversation_id}/claim", response_model=SupportConversationResponse)
-def claim_support_conversation(
+async def claim_support_conversation(
     conversation_id: str,
     admin_user: User = Depends(require_admin_user),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.claim_conversation(admin_user=admin_user, conversation_id=conversation_id)
+    await support_ws_manager.broadcast_json(
+        conversation_id,
+        {
+            "type": "conversation.updated",
+            "conversation_id": conversation_id,
+            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
     return _conversation_to_response(row)
 
 
 @router.post("/admin/support/conversations/{conversation_id}/release", response_model=SupportConversationResponse)
-def release_support_conversation(
+async def release_support_conversation(
     conversation_id: str,
     admin_user: User = Depends(require_admin_user),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.release_conversation(admin_user=admin_user, conversation_id=conversation_id)
+    await support_ws_manager.broadcast_json(
+        conversation_id,
+        {
+            "type": "conversation.updated",
+            "conversation_id": conversation_id,
+            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
     return _conversation_to_response(row)
 
 
 @router.post("/admin/support/conversations/{conversation_id}/close", response_model=SupportConversationResponse)
-def close_support_conversation(
+async def close_support_conversation(
     conversation_id: str,
     admin_user: User = Depends(require_admin_user),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.close_conversation(admin_user=admin_user, conversation_id=conversation_id)
+    await support_ws_manager.broadcast_json(
+        conversation_id,
+        {
+            "type": "conversation.updated",
+            "conversation_id": conversation_id,
+            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
     return _conversation_to_response(row)
 
 

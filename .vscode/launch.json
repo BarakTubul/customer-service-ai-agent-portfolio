@@ -8,6 +8,13 @@
         "Backend: Launch uvicorn (debug)"
       ],
       "stopAll": true
+    },
+    {
+      "name": "Open Full Stack App (No Debug)",
+      "configurations": [
+        "Open Full Stack App (No Debug Launcher)"
+      ],
+      "stopAll": true
     }
   ],
   "configurations": [
@@ -45,6 +52,22 @@
       "url": "http://localhost:3000",
       "webRoot": "${workspaceFolder}/frontend/src",
       "preLaunchTask": "Start Frontend Dev"
+    },
+    {
+      "name": "Open Frontend App (No Debug)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "preLaunchTask": "Start Frontend Dev"
+    },
+    {
+      "name": "Open Full Stack App (No Debug Launcher)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "preLaunchTask": "Start Full Stack No Debug"
     }
   ]
 }

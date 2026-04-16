@@ -24,7 +24,6 @@ export function Header() {
         { label: 'My Orders', path: '/orders' },
         { label: 'Order', path: '/order' },
         { label: 'Refunds', path: '/refund' },
-        { label: 'Support', path: '/support' },
       ];
 
   useEffect(() => {
