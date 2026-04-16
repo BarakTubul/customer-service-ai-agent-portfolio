@@ -13,6 +13,8 @@ interface SupportThreadMessage {
   created_at: string;
 }
 
+const THREAD_PAGE_SIZE = 30;
+
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString('en-US', {
     month: 'short',
@@ -43,8 +45,13 @@ export function AdminSupportInboxPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [threadLoading, setThreadLoading] = useState(false);
+  const [threadLoadingOlder, setThreadLoadingOlder] = useState(false);
+  const [threadHasMore, setThreadHasMore] = useState(true);
+  const [threadChunkLoadedNotice, setThreadChunkLoadedNotice] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const messageIdsRef = useRef(new Set<string>());
+  const threadContainerRef = useRef<HTMLDivElement | null>(null);
+  const threadChunkLoadedTimerRef = useRef<number | null>(null);
 
   const selectedConversationState = useMemo(() => {
     if (!selectedConversation) {
@@ -81,7 +88,7 @@ export function AdminSupportInboxPage() {
     try {
       const [conversationResponse, messageResponse] = await Promise.all([
         apiClient.getSupportConversation(conversationId),
-        apiClient.listSupportMessages(conversationId, 100),
+        apiClient.listSupportMessages(conversationId, THREAD_PAGE_SIZE),
       ]);
 
       setSelectedConversation(conversationResponse);
@@ -94,6 +101,7 @@ export function AdminSupportInboxPage() {
         }))
       );
       messageIdsRef.current = new Set(messageResponse.items.map((item) => item.message_id));
+      setThreadHasMore(messageResponse.items.length >= THREAD_PAGE_SIZE);
       setSelectedConversationId(conversationId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load support conversation');
@@ -104,6 +112,11 @@ export function AdminSupportInboxPage() {
 
   useEffect(() => {
     void loadInbox();
+    return () => {
+      if (threadChunkLoadedTimerRef.current !== null) {
+        window.clearTimeout(threadChunkLoadedTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -138,6 +151,7 @@ export function AdminSupportInboxPage() {
           setSelectedConversation(payload.conversation);
           setMessages(payload.messages || []);
           messageIdsRef.current = new Set((payload.messages || []).map((item) => item.message_id));
+          setThreadHasMore((payload.messages || []).length >= THREAD_PAGE_SIZE);
           setThreadLoading(false);
           return;
         }
@@ -262,6 +276,82 @@ export function AdminSupportInboxPage() {
       setError(err instanceof Error ? err.message : 'Failed to send reply');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const loadOlderThreadMessages = async () => {
+    if (!selectedConversation || threadLoadingOlder || !threadHasMore) {
+      return;
+    }
+
+    const oldestMessageId = messages[0]?.message_id;
+    if (!oldestMessageId) {
+      setThreadHasMore(false);
+      return;
+    }
+
+    const container = threadContainerRef.current;
+    const previousHeight = container?.scrollHeight || 0;
+
+    setThreadLoadingOlder(true);
+    setError('');
+    try {
+      const response = await apiClient.listSupportMessages(
+        selectedConversation.conversation_id,
+        THREAD_PAGE_SIZE,
+        oldestMessageId
+      );
+      const olderMessages = response.items.map((item) => ({
+        message_id: item.message_id,
+        sender_role: item.sender_role,
+        body: item.body,
+        created_at: item.created_at,
+      }));
+
+      if (olderMessages.length === 0) {
+        setThreadHasMore(false);
+        return;
+      }
+
+      setMessages((current) => {
+        const deduped = olderMessages.filter((item) => !messageIdsRef.current.has(item.message_id));
+        deduped.forEach((item) => messageIdsRef.current.add(item.message_id));
+        return [...deduped, ...current];
+      });
+      setThreadChunkLoadedNotice(true);
+      if (threadChunkLoadedTimerRef.current !== null) {
+        window.clearTimeout(threadChunkLoadedTimerRef.current);
+      }
+      threadChunkLoadedTimerRef.current = window.setTimeout(() => {
+        setThreadChunkLoadedNotice(false);
+      }, 1400);
+
+      if (olderMessages.length < THREAD_PAGE_SIZE) {
+        setThreadHasMore(false);
+      }
+
+      window.requestAnimationFrame(() => {
+        const nextContainer = threadContainerRef.current;
+        if (!nextContainer) {
+          return;
+        }
+        const nextHeight = nextContainer.scrollHeight;
+        nextContainer.scrollTop = nextHeight - previousHeight;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load older thread messages');
+    } finally {
+      setThreadLoadingOlder(false);
+    }
+  };
+
+  const handleThreadScroll = () => {
+    const container = threadContainerRef.current;
+    if (!container || threadLoadingOlder || !threadHasMore) {
+      return;
+    }
+    if (container.scrollTop <= 24) {
+      void loadOlderThreadMessages();
     }
   };
 
@@ -399,8 +489,25 @@ export function AdminSupportInboxPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex-1 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div
+                  ref={threadContainerRef}
+                  onScroll={handleThreadScroll}
+                  className="mt-4 flex-1 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                >
                   <div className="space-y-3">
+                    {threadLoadingOlder && (
+                      <p className="text-xs text-center text-slate-500 inline-flex w-full items-center justify-center gap-2">
+                        <span>Loading older messages</span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse [animation-delay:120ms]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse [animation-delay:240ms]" />
+                        </span>
+                      </p>
+                    )}
+                    {threadChunkLoadedNotice && !threadLoadingOlder && (
+                      <p className="text-xs text-center text-emerald-600">Older messages loaded</p>
+                    )}
                     {threadLoading ? (
                       <p className="text-sm text-slate-500">Loading thread...</p>
                     ) : messages.length === 0 ? (

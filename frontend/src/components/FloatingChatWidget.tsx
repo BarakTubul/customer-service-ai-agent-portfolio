@@ -35,6 +35,8 @@ interface SupportConversationSnapshot {
   closed_at: string | null;
 }
 
+const SUPPORT_PAGE_SIZE = 30;
+
 const WELCOME_MESSAGE =
   'Welcome! You can ask any question about the site, including orders, refunds, or account issues. You can also ask for human assistance at any time.';
 
@@ -164,9 +166,13 @@ export function FloatingChatWidget() {
   const [supportLoading, setSupportLoading] = useState(false);
   const [supportSending, setSupportSending] = useState(false);
   const [supportError, setSupportError] = useState('');
+  const [supportLoadingOlder, setSupportLoadingOlder] = useState(false);
+  const [supportHasMore, setSupportHasMore] = useState(true);
+  const [supportChunkLoadedNotice, setSupportChunkLoadedNotice] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const supportSocketRef = useRef<WebSocket | null>(null);
   const supportMessageIds = useRef(new Set<string>());
+  const supportChunkLoadedTimerRef = useRef<number | null>(null);
 
   const supportTitle = useMemo(() => {
     if (!supportConversation) {
@@ -242,6 +248,8 @@ export function FloatingChatWidget() {
         setSupportConversation(null);
         setSupportMessages([]);
         setSupportInput('');
+        setSupportHasMore(true);
+        setSupportLoadingOlder(false);
         setSupportStatus('Connecting you to human support...');
         setSupportError('');
         const conversation = await apiClient.createSupportConversation({
@@ -282,6 +290,7 @@ export function FloatingChatWidget() {
               setSupportConversation(payload.conversation);
               setSupportMessages(payload.messages || []);
               payload.messages?.forEach((message) => supportMessageIds.current.add(message.message_id));
+              setSupportHasMore((payload.messages || []).length >= SUPPORT_PAGE_SIZE);
               setSupportLoading(false);
               return;
             }
@@ -337,6 +346,9 @@ export function FloatingChatWidget() {
     void bootstrapSupport();
 
     return () => {
+      if (supportChunkLoadedTimerRef.current !== null) {
+        window.clearTimeout(supportChunkLoadedTimerRef.current);
+      }
       cancelled = true;
       supportSocketRef.current?.close();
       supportSocketRef.current = null;
@@ -352,8 +364,16 @@ export function FloatingChatWidget() {
       return;
     }
 
-    scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-  }, [supportMessages, mode, isOpen]);
+    if (supportLoadingOlder) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom < 120 || supportMessages.length <= SUPPORT_PAGE_SIZE) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [supportMessages, mode, isOpen, supportLoadingOlder]);
 
   if (location.pathname === '/chat') {
     return null;
@@ -487,6 +507,77 @@ export function FloatingChatWidget() {
     setSupportSending(false);
   };
 
+  const loadOlderSupportMessages = async () => {
+    if (!supportConversation || supportLoadingOlder || !supportHasMore) {
+      return;
+    }
+
+    const oldestMessageId = supportMessages[0]?.message_id;
+    if (!oldestMessageId) {
+      setSupportHasMore(false);
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    const previousHeight = container?.scrollHeight || 0;
+
+    setSupportLoadingOlder(true);
+    setSupportError('');
+    try {
+      const response = await apiClient.listSupportMessages(
+        supportConversation.conversation_id,
+        SUPPORT_PAGE_SIZE,
+        oldestMessageId
+      );
+      const olderMessages = response.items as SupportMessage[];
+
+      if (olderMessages.length === 0) {
+        setSupportHasMore(false);
+        return;
+      }
+
+      setSupportMessages((current) => {
+        const deduped = olderMessages.filter((item) => !supportMessageIds.current.has(item.message_id));
+        deduped.forEach((item) => supportMessageIds.current.add(item.message_id));
+        return [...deduped, ...current];
+      });
+      setSupportChunkLoadedNotice(true);
+      if (supportChunkLoadedTimerRef.current !== null) {
+        window.clearTimeout(supportChunkLoadedTimerRef.current);
+      }
+      supportChunkLoadedTimerRef.current = window.setTimeout(() => {
+        setSupportChunkLoadedNotice(false);
+      }, 1400);
+
+      if (olderMessages.length < SUPPORT_PAGE_SIZE) {
+        setSupportHasMore(false);
+      }
+
+      window.requestAnimationFrame(() => {
+        const nextContainer = scrollContainerRef.current;
+        if (!nextContainer) {
+          return;
+        }
+        const nextHeight = nextContainer.scrollHeight;
+        nextContainer.scrollTop = nextHeight - previousHeight;
+      });
+    } catch (err) {
+      setSupportError(err instanceof Error ? err.message : 'Failed to load older support messages');
+    } finally {
+      setSupportLoadingOlder(false);
+    }
+  };
+
+  const handleSupportScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container || supportLoadingOlder || !supportHasMore) {
+      return;
+    }
+    if (container.scrollTop <= 24) {
+      void loadOlderSupportMessages();
+    }
+  };
+
   const enterHumanSupport = () => {
     setMode('support');
     setIsOpen(true);
@@ -588,8 +679,22 @@ export function FloatingChatWidget() {
             <>
               <div
                 ref={scrollContainerRef}
+                onScroll={handleSupportScroll}
                 className="h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50 space-y-2 mb-3"
               >
+                {supportLoadingOlder && (
+                  <div className="text-[11px] text-center text-gray-500 py-1 inline-flex w-full items-center justify-center gap-2">
+                    <span>Loading older messages</span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-pulse" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-pulse [animation-delay:120ms]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-pulse [animation-delay:240ms]" />
+                    </span>
+                  </div>
+                )}
+                {supportChunkLoadedNotice && !supportLoadingOlder && (
+                  <div className="text-[11px] text-center text-emerald-600 py-1">Older messages loaded</div>
+                )}
                 {supportMessages.length === 0 && (
                   <div className="text-xs p-2 rounded-md bg-blue-50 text-gray-800 border border-blue-100 mr-8">
                     {supportLoading ? 'Connecting you to human support...' : supportStatus}

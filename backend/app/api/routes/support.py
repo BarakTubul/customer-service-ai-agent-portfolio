@@ -24,6 +24,7 @@ from app.repositories.user_repository import UserRepository
 from app.services.support_chat_service import SupportChatService
 
 router = APIRouter()
+SUPPORT_SNAPSHOT_LIMIT = 30
 
 
 class SupportWebSocketManager:
@@ -133,10 +134,16 @@ def get_support_conversation(
 def list_support_messages(
     conversation_id: str,
     limit: int = Query(default=50, ge=1, le=500),
+    before_message_id: str | None = Query(default=None, min_length=1, max_length=64),
     current_user: User = Depends(get_current_user),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportMessageListResponse:
-    rows = support_chat_service.list_messages(current_user=current_user, conversation_id=conversation_id, limit=limit)
+    rows = support_chat_service.list_messages(
+        current_user=current_user,
+        conversation_id=conversation_id,
+        limit=limit,
+        before_message_id=before_message_id,
+    )
     items = [_message_to_response(row) for row in rows]
     return SupportMessageListResponse(items=items, total=len(items))
 
@@ -298,7 +305,7 @@ async def stream_support_conversation(websocket: WebSocket, conversation_id: str
                     for row in support_chat_service.list_messages(
                         current_user=user,
                         conversation_id=conversation_id,
-                        limit=100,
+                        limit=SUPPORT_SNAPSHOT_LIMIT,
                     )
                 ],
             },

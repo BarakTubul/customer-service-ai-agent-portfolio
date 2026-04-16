@@ -49,9 +49,20 @@ class SupportChatService:
             raise ForbiddenError("Conversation does not belong to current user")
         return row
 
-    def list_messages(self, *, current_user: User, conversation_id: str, limit: int = 50):
+    def list_messages(
+        self,
+        *,
+        current_user: User,
+        conversation_id: str,
+        limit: int = 50,
+        before_message_id: str | None = None,
+    ):
         _ = self.get_conversation(current_user=current_user, conversation_id=conversation_id)
-        return self.support_repository.list_messages(conversation_id=conversation_id, limit=limit)
+        return self.support_repository.list_messages(
+            conversation_id=conversation_id,
+            limit=limit,
+            before_message_id=before_message_id,
+        )
 
     def send_message(self, *, current_user: User, conversation_id: str, body: str):
         row = self.get_conversation(current_user=current_user, conversation_id=conversation_id)

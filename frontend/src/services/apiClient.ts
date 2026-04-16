@@ -273,11 +273,12 @@ class APIClient {
 
   async listSupportMessages(
     conversationId: string,
-    limit = 50
+    limit = 50,
+    beforeMessageId?: string
   ): Promise<t.SupportMessageListResponse> {
     const response = await this.client.get<t.SupportMessageListResponse>(
       `/support/conversations/${conversationId}/messages`,
-      { params: { limit } }
+      { params: { limit, before_message_id: beforeMessageId || undefined } }
     );
     return response.data;
   }

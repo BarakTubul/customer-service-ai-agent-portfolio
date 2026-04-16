@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.support_conversation import SupportConversation
@@ -143,14 +143,39 @@ class SupportRepository:
         self.db.refresh(row)
         return row
 
-    def list_messages(self, *, conversation_id: str, limit: int = 50) -> list[SupportMessage]:
+    def list_messages(
+        self,
+        *,
+        conversation_id: str,
+        limit: int = 50,
+        before_message_id: str | None = None,
+    ) -> list[SupportMessage]:
         bounded = max(1, min(limit, 500))
-        stmt = (
-            select(SupportMessage)
-            .where(SupportMessage.conversation_id == conversation_id)
-            .order_by(SupportMessage.created_at.desc())
-            .limit(bounded)
-        )
+
+        stmt = select(SupportMessage).where(SupportMessage.conversation_id == conversation_id)
+
+        if before_message_id is not None:
+            anchor_stmt = (
+                select(SupportMessage)
+                .where(SupportMessage.conversation_id == conversation_id)
+                .where(SupportMessage.message_id == before_message_id)
+                .limit(1)
+            )
+            anchor = self.db.scalar(anchor_stmt)
+            if anchor is None:
+                return []
+
+            stmt = stmt.where(
+                or_(
+                    SupportMessage.created_at < anchor.created_at,
+                    and_(
+                        SupportMessage.created_at == anchor.created_at,
+                        SupportMessage.id < anchor.id,
+                    ),
+                )
+            )
+
+        stmt = stmt.order_by(SupportMessage.created_at.desc(), SupportMessage.id.desc()).limit(bounded)
         rows = list(self.db.scalars(stmt).all())
         rows.reverse()
         return rows
