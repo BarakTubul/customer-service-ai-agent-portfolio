@@ -57,19 +57,24 @@ def get_order_placement_service(
 ) -> OrderPlacementService:
     return OrderPlacementService(order_repository)
 
-
-def get_notification_service(
-    account_order_service: AccountOrderService = Depends(get_account_order_service),
-) -> NotificationService:
-    return NotificationService(account_order_service)
-
-
 def get_refund_repository(db: Session = Depends(get_db)) -> RefundRepository:
     return RefundRepository(db)
 
 
 def get_support_repository(db: Session = Depends(get_db)) -> SupportRepository:
     return SupportRepository(db)
+
+
+def get_notification_service(
+    account_order_service: AccountOrderService = Depends(get_account_order_service),
+    refund_repository: RefundRepository = Depends(get_refund_repository),
+    support_repository: SupportRepository = Depends(get_support_repository),
+) -> NotificationService:
+    return NotificationService(
+        account_order_service=account_order_service,
+        refund_repository=refund_repository,
+        support_repository=support_repository,
+    )
 
 
 def get_refund_service(

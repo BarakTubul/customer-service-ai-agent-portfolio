@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
 from app.api.dependencies import get_support_chat_service
@@ -62,6 +63,7 @@ def _conversation_to_response(row) -> SupportConversationResponse:
     return SupportConversationResponse(
         conversation_id=row.conversation_id,
         customer_user_id=row.customer_user_id,
+        customer_email=None,
         status=row.status,
         priority=row.priority,
         assigned_admin_user_id=row.assigned_admin_user_id,
@@ -72,6 +74,13 @@ def _conversation_to_response(row) -> SupportConversationResponse:
         updated_at=row.updated_at,
         closed_at=row.closed_at,
     )
+
+
+def _conversation_to_response_with_email(row, db: Session) -> SupportConversationResponse:
+    response = _conversation_to_response(row)
+    customer = UserRepository(db).get_by_id(row.customer_user_id)
+    response.customer_email = customer.email if customer else None
+    return response
 
 
 def _conversation_summary_to_response(row, last_message_at, last_message_preview, unread_message_count) -> SupportConversationResponse:
@@ -126,17 +135,26 @@ def create_support_conversation(
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.create_or_reuse_conversation(customer_user=current_user, payload=payload)
-    return _conversation_to_response(row)
+    response = _conversation_to_response(row)
+    response.customer_email = current_user.email
+    return response
 
 
 @router.get("/support/conversations/{conversation_id}", response_model=SupportConversationResponse)
 def get_support_conversation(
     conversation_id: str,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.get_conversation(current_user=current_user, conversation_id=conversation_id)
-    return _conversation_to_response(row)
+    if current_user.is_admin:
+        return _conversation_to_response_with_email(row, db)
+
+    response = _conversation_to_response(row)
+    if row.customer_user_id == current_user.id:
+        response.customer_email = current_user.email
+    return response
 
 
 @router.get("/support/conversations/{conversation_id}/messages", response_model=SupportMessageListResponse)
@@ -222,13 +240,13 @@ def list_all_support_conversations(
     limit: int = Query(default=100, ge=1, le=500),
     status: str | None = Query(default=None, pattern="^(open|assigned|closed)$"),
     priority: str | None = Query(default=None, pattern="^(normal|high)$"),
-    assigned_state: str = Query(default="all", pattern="^(all|assigned|unassigned)$"),
+    unread_only: bool = Query(default=False),
     created_after: datetime | None = Query(default=None),
     created_before: datetime | None = Query(default=None),
     updated_after: datetime | None = Query(default=None),
     updated_before: datetime | None = Query(default=None),
-    unread_only: bool = Query(default=False),
     admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationListResponse:
     rows = support_chat_service.list_admin_conversations(
@@ -236,17 +254,19 @@ def list_all_support_conversations(
         limit=limit,
         status=status,
         priority=priority,
-        assigned_state=assigned_state,
+        unread_only=unread_only,
         created_after=created_after,
         created_before=created_before,
         updated_after=updated_after,
         updated_before=updated_before,
-        unread_only=unread_only,
     )
     items = [
         _conversation_summary_to_response(row[0], row[1], row[2], row[3])
         for row in rows
     ]
+    for item in items:
+        customer = UserRepository(db).get_by_id(item.customer_user_id)
+        item.customer_email = customer.email if customer else None
     return SupportConversationListResponse(items=items, total=len(items))
 
 
@@ -319,6 +339,26 @@ async def update_support_conversation_priority(
         conversation_id=conversation_id,
         priority=payload.priority,
     )
+    await support_ws_manager.broadcast_json(
+        conversation_id,
+        {
+            "type": "conversation.updated",
+            "conversation_id": conversation_id,
+            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
+    return _conversation_to_response(row)
+
+
+@router.post("/admin/support/conversations/{conversation_id}/read", response_model=SupportConversationResponse)
+async def mark_support_conversation_read(
+    conversation_id: str,
+    admin_user: User = Depends(require_admin_user),
+    support_chat_service: SupportChatService = Depends(get_support_chat_service),
+) -> SupportConversationResponse:
+    support_chat_service.mark_conversation_messages_read(admin_user=admin_user, conversation_id=conversation_id)
+    row = support_chat_service.get_conversation(current_user=admin_user, conversation_id=conversation_id)
     await support_ws_manager.broadcast_json(
         conversation_id,
         {

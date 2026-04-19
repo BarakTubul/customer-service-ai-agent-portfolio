@@ -11,9 +11,7 @@ type ThreadMessage = {
   created_at: string;
 };
 
-type ConversationStatusFilter = 'all' | 'open' | 'assigned' | 'closed';
 type ConversationPriorityFilter = 'all' | 'normal' | 'high';
-type ConversationAssignedFilter = 'all' | 'assigned' | 'unassigned';
 
 const THREAD_PAGE_SIZE = 30;
 
@@ -67,24 +65,30 @@ export function AdminSupportInboxPage() {
   const [threadHasMore, setThreadHasMore] = useState(true);
   const [threadChunkLoadedNotice, setThreadChunkLoadedNotice] = useState(false);
   const [draftPriority, setDraftPriority] = useState<'normal' | 'high'>('normal');
-  const [statusFilter, setStatusFilter] = useState<ConversationStatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<ConversationPriorityFilter>('all');
-  const [assignedFilter, setAssignedFilter] = useState<ConversationAssignedFilter>('all');
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [createdAfter, setCreatedAfter] = useState('');
   const [createdBefore, setCreatedBefore] = useState('');
   const [updatedAfter, setUpdatedAfter] = useState('');
   const [updatedBefore, setUpdatedBefore] = useState('');
+  const [threadAtBottom, setThreadAtBottom] = useState(true);
   const socketRef = useRef<WebSocket | null>(null);
   const messageIdsRef = useRef(new Set<string>());
   const threadContainerRef = useRef<HTMLDivElement | null>(null);
   const threadChunkLoadedTimerRef = useRef<number | null>(null);
 
   const selectedConversationState = useMemo(() => selectedConversation, [selectedConversation]);
+  const selectedConversationListItem = useMemo(
+    () => conversations.find((item) => item.conversation_id === selectedConversationId),
+    [conversations, selectedConversationId]
+  );
 
   const upsertConversationInList = (conversation: t.SupportConversationResponse) => {
     setConversations((current) => {
       const next = current.filter((item) => item.conversation_id !== conversation.conversation_id);
+      if (unreadOnly && (conversation.unread_message_count || 0) === 0) {
+        return next;
+      }
       next.push(conversation);
       next.sort((left, right) => {
         const rightUpdatedAt = new Date(right.updated_at).getTime();
@@ -101,20 +105,39 @@ export function AdminSupportInboxPage() {
     });
   };
 
+  const markSelectedConversationRead = async () => {
+    if (!selectedConversationId) {
+      return;
+    }
+    if ((selectedConversationListItem?.unread_message_count || 0) <= 0) {
+      return;
+    }
+
+    try {
+      const updated = await apiClient.markSupportConversationRead(selectedConversationId);
+      setSelectedConversation((current) => ({
+        ...current,
+        ...updated,
+        customer_email: current?.customer_email ?? updated.customer_email ?? null,
+      }));
+      upsertConversationInList(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark support conversation as read');
+    }
+  };
+
   const loadConversations = async () => {
     setLoadingList(true);
     setError('');
     try {
       const response = await apiClient.listAdminSupportConversations({
         limit: 100,
-        status: statusFilter,
         priority: priorityFilter,
-        assignedState: assignedFilter,
+        unreadOnly,
         createdAfter: toIsoDateTime(createdAfter, false),
         createdBefore: toIsoDateTime(createdBefore, true),
         updatedAfter: toIsoDateTime(updatedAfter, false),
         updatedBefore: toIsoDateTime(updatedBefore, true),
-        unreadOnly,
       });
       setConversations(response.items);
 
@@ -150,6 +173,7 @@ export function AdminSupportInboxPage() {
       messageIdsRef.current = new Set(messageResponse.items.map((item) => item.message_id));
       setThreadHasMore(messageResponse.items.length >= THREAD_PAGE_SIZE);
       setSelectedConversationId(conversationId);
+      setThreadAtBottom(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load support conversation');
     } finally {
@@ -164,7 +188,7 @@ export function AdminSupportInboxPage() {
         window.clearTimeout(threadChunkLoadedTimerRef.current);
       }
     };
-  }, [statusFilter, priorityFilter, assignedFilter, unreadOnly, createdAfter, createdBefore, updatedAfter, updatedBefore]);
+  }, [priorityFilter, unreadOnly, createdAfter, createdBefore, updatedAfter, updatedBefore]);
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -193,7 +217,10 @@ export function AdminSupportInboxPage() {
             conversation: t.SupportConversationResponse;
             messages: ThreadMessage[];
           };
-          setSelectedConversation(payload.conversation);
+          setSelectedConversation((current) => ({
+            ...payload.conversation,
+            customer_email: payload.conversation.customer_email || current?.customer_email || null,
+          }));
           setMessages(payload.messages || []);
           messageIdsRef.current = new Set((payload.messages || []).map((item) => item.message_id));
           setThreadHasMore((payload.messages || []).length >= THREAD_PAGE_SIZE);
@@ -203,7 +230,11 @@ export function AdminSupportInboxPage() {
 
         if (data.type === 'conversation.updated') {
           const payload = data.payload as t.SupportConversationResponse;
-          setSelectedConversation(payload);
+          setSelectedConversation((current) => ({
+            ...current,
+            ...payload,
+            customer_email: current?.customer_email ?? payload.customer_email ?? null,
+          }));
           setDraftPriority(payload.priority === 'high' ? 'high' : 'normal');
           upsertConversationInList(payload);
           return;
@@ -235,6 +266,17 @@ export function AdminSupportInboxPage() {
       socketRef.current = null;
     };
   }, [selectedConversationId]);
+
+  useEffect(() => {
+    if (!selectedConversationId || threadLoading) {
+      return;
+    }
+    if (!threadAtBottom) {
+      return;
+    }
+
+    void markSelectedConversationRead();
+  }, [selectedConversationId, messages, threadAtBottom, threadLoading]);
 
   const loadOlderThreadMessages = async () => {
     if (!selectedConversation || threadLoadingOlder || !threadHasMore) {
@@ -306,8 +348,14 @@ export function AdminSupportInboxPage() {
   const handleThreadScroll = () => {
     const container = threadContainerRef.current;
     if (!container || threadLoadingOlder || !threadHasMore) {
+      if (container) {
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        setThreadAtBottom(distanceFromBottom <= 80);
+      }
       return;
     }
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    setThreadAtBottom(distanceFromBottom <= 80);
     if (container.scrollTop <= 24) {
       void loadOlderThreadMessages();
     }
@@ -330,10 +378,14 @@ export function AdminSupportInboxPage() {
         selectedConversation.conversation_id,
         draftPriority
       );
-      setSelectedConversation(updated);
+      setSelectedConversation((current) => ({
+        ...current,
+        ...updated,
+        customer_email: current?.customer_email ?? updated.customer_email ?? null,
+      }));
       setDraftPriority(updated.priority === 'high' ? 'high' : 'normal');
       upsertConversationInList(updated);
-      setSuccess(`Marked ${selectedConversation.conversation_id} as ${updated.priority}.`);
+      setSuccess(`Marked the conversation as ${updated.priority}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update urgency');
     } finally {
@@ -384,20 +436,6 @@ export function AdminSupportInboxPage() {
         <Card className="border border-slate-200 bg-white shadow-xl">
           <div className="grid gap-4 lg:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as ConversationStatusFilter)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-              >
-                <option value="all">All</option>
-                <option value="open">Open</option>
-                <option value="assigned">Assigned</option>
-                <option value="closed">Closed</option>
-              </select>
-            </div>
-
-            <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Urgency</label>
               <select
                 value={priorityFilter}
@@ -410,17 +448,15 @@ export function AdminSupportInboxPage() {
               </select>
             </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Assignment</label>
-              <select
-                value={assignedFilter}
-                onChange={(event) => setAssignedFilter(event.target.value as ConversationAssignedFilter)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant={unreadOnly ? 'secondary' : 'outline'}
+                onClick={() => setUnreadOnly((current) => !current)}
+                className="w-full justify-center"
               >
-                <option value="all">All</option>
-                <option value="assigned">Assigned</option>
-                <option value="unassigned">Unassigned</option>
-              </select>
+                Unread only
+              </Button>
             </div>
 
             <div>
@@ -443,26 +479,12 @@ export function AdminSupportInboxPage() {
               <Input type="date" value={updatedBefore} onChange={(event) => setUpdatedBefore(event.target.value)} />
             </div>
 
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={unreadOnly}
-                  onChange={(event) => setUnreadOnly(event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Unread only
-              </label>
-            </div>
-
             <div className="flex items-end gap-2 lg:justify-end">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  setStatusFilter('all');
                   setPriorityFilter('all');
-                  setAssignedFilter('all');
                   setUnreadOnly(false);
                   setCreatedAfter('');
                   setCreatedBefore('');
@@ -476,8 +498,8 @@ export function AdminSupportInboxPage() {
           </div>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_1.15fr]">
-          <Card className="border border-slate-200 bg-white shadow-xl">
+        <div className="grid gap-6 lg:grid-cols-[1.05fr_1.15fr] lg:items-stretch">
+          <Card className="h-[40rem] border border-slate-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Conversations ({conversations.length})</h2>
@@ -505,7 +527,9 @@ export function AdminSupportInboxPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold text-slate-900">{conversation.conversation_id}</p>
+                            <p className="font-semibold text-slate-900">
+                              {conversation.customer_email || `Customer ${conversation.customer_user_id}`}
+                            </p>
                             {unreadCount > 0 ? (
                               <span className={`${unreadBadge.base} ${unreadBadge.unreadClass}`}>
                                 {unreadCount} new
@@ -519,8 +543,7 @@ export function AdminSupportInboxPage() {
                               {conversation.priority}
                             </span>
                           </div>
-                          <p className="mt-1 text-xs text-slate-600">Customer {conversation.customer_user_id}</p>
-                          <p className="text-xs text-slate-600">Status: {conversation.status}</p>
+                          <p className="mt-1 text-xs text-slate-600">{conversation.customer_email || 'Unknown customer'}</p>
                           <p className="mt-1 text-xs text-slate-500">
                             Last activity: {conversation.last_message_at ? formatDateTime(conversation.last_message_at) : 'No messages yet'}
                           </p>
@@ -530,7 +553,6 @@ export function AdminSupportInboxPage() {
                         </div>
                         <div className="text-right text-xs text-slate-500">
                           <p>Updated {formatDateTime(conversation.updated_at)}</p>
-                          <p>{conversation.assigned_admin_user_id ? `Admin ${conversation.assigned_admin_user_id}` : 'Unassigned'}</p>
                         </div>
                       </div>
                     </button>
@@ -540,7 +562,7 @@ export function AdminSupportInboxPage() {
             </div>
           </Card>
 
-          <Card className="border border-slate-200 bg-white shadow-xl">
+          <Card className="h-[40rem] border border-slate-200 bg-white shadow-xl">
             {!selectedConversation ? (
               <div className="flex h-full min-h-[28rem] items-center justify-center text-center text-slate-500">
                 <div>
@@ -549,15 +571,16 @@ export function AdminSupportInboxPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex min-h-[28rem] flex-col">
+              <div className="flex h-full min-h-0 flex-col">
                 <div className="border-b border-slate-100 pb-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-700">Conversation</p>
-                      <h2 className="mt-1 text-xl font-bold text-slate-900">{selectedConversation.conversation_id}</h2>
-                      <p className="text-sm text-slate-500">Customer {selectedConversation.customer_user_id}</p>
+                      <h2 className="mt-1 text-xl font-bold text-slate-900">
+                        {selectedConversation.customer_email || `Customer ${selectedConversation.customer_user_id}`}
+                      </h2>
                       <p className="text-sm text-slate-500">
-                        {selectedConversation.status} • {selectedConversation.priority} • {selectedUnreadCount} unread
+                        {selectedConversation.customer_email || 'No customer email available'} • {selectedConversation.priority} • {selectedUnreadCount} unread
                       </p>
                     </div>
                     <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
@@ -584,7 +607,7 @@ export function AdminSupportInboxPage() {
                 <div
                   ref={threadContainerRef}
                   onScroll={handleThreadScroll}
-                  className="mt-4 flex-1 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                  className="mt-4 flex-1 min-h-0 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-4"
                 >
                   <div className="space-y-3">
                     {threadLoadingOlder && (

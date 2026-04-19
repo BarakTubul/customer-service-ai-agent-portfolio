@@ -155,7 +155,7 @@ export function Header() {
                             type="button"
                             className="w-full text-left rounded-lg border border-gray-100 p-3 hover:bg-gray-50 transition"
                             onClick={() => {
-                              navigate(`/orders/${notification.order_id}/timeline`);
+                              navigate(notification.target_path || `/orders/${notification.order_id}/timeline`);
                               setShowNotifications(false);
                             }}
                           >

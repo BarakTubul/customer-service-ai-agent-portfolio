@@ -680,7 +680,7 @@ export function FloatingChatWidget() {
               <div
                 ref={scrollContainerRef}
                 onScroll={handleSupportScroll}
-                className="h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50 space-y-2 mb-3"
+                className="h-64 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50 space-y-2 mb-3"
               >
                 {supportLoadingOlder && (
                   <div className="text-[11px] text-center text-gray-500 py-1 inline-flex w-full items-center justify-center gap-2">

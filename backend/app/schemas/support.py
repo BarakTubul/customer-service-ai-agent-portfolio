@@ -15,6 +15,7 @@ class SupportConversationCreateRequest(BaseModel):
 class SupportConversationResponse(BaseModel):
     conversation_id: str
     customer_user_id: int
+    customer_email: str | None = None
     status: str
     priority: str
     assigned_admin_user_id: int | None

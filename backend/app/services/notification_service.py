@@ -5,24 +5,52 @@ from datetime import UTC
 from app.models.user import User
 from app.schemas.notification import NotificationResponse
 from app.services.account_order_service import AccountOrderService
+from app.repositories.refund_repository import RefundRepository
+from app.repositories.support_repository import SupportRepository
 
 
 _LAST_NOTIFIED_STATUSES: dict[int, dict[str, str]] = {}
+_LAST_NOTIFIED_ADMIN_REFUNDS: dict[int, set[str]] = {}
+_LAST_NOTIFIED_ADMIN_SUPPORT: dict[int, dict[str, str]] = {}
 
 
 class NotificationService:
-    def __init__(self, account_order_service: AccountOrderService) -> None:
+    def __init__(
+        self,
+        *,
+        account_order_service: AccountOrderService,
+        refund_repository: RefundRepository,
+        support_repository: SupportRepository,
+    ) -> None:
         self.account_order_service = account_order_service
+        self.refund_repository = refund_repository
+        self.support_repository = support_repository
 
     def get_live_notifications(self, user: User) -> list[NotificationResponse]:
         if user.is_guest:
             return []
 
-        orders = self.account_order_service.list_orders(user)
-        if not orders:
-            return []
+        notifications: list[NotificationResponse] = []
 
-        seen_statuses = _LAST_NOTIFIED_STATUSES.setdefault(user.id, {})
+        orders = self.account_order_service.list_orders(user)
+        if orders:
+            seen_statuses = _LAST_NOTIFIED_STATUSES.setdefault(user.id, {})
+            notifications.extend(self._build_order_notifications(user=user, orders=orders, seen_statuses=seen_statuses))
+
+        if user.is_admin:
+            notifications.extend(self._build_admin_refund_notifications(user))
+            notifications.extend(self._build_admin_support_notifications(user))
+
+        notifications.sort(key=lambda item: item.created_at, reverse=True)
+        return notifications
+
+    def _build_order_notifications(
+        self,
+        *,
+        user: User,
+        orders,
+        seen_statuses: dict[str, str],
+    ) -> list[NotificationResponse]:
         notifications: list[NotificationResponse] = []
 
         for order in orders:
@@ -41,7 +69,9 @@ class NotificationService:
             notifications.append(
                 NotificationResponse(
                     notification_id=f"{order.order_id}:{current_status}",
+                    kind="order",
                     order_id=order.order_id,
+                    target_path=f"/orders/{order.order_id}/timeline",
                     status=current_status,
                     title=self._build_title(current_status),
                     message=self._build_message(order.order_id, current_status),
@@ -49,7 +79,61 @@ class NotificationService:
                 )
             )
 
-        notifications.sort(key=lambda item: item.created_at, reverse=True)
+        return notifications
+
+    def _build_admin_refund_notifications(self, user: User) -> list[NotificationResponse]:
+        seen_refunds = _LAST_NOTIFIED_ADMIN_REFUNDS.setdefault(user.id, set())
+        notifications: list[NotificationResponse] = []
+
+        for refund in self.refund_repository.list_pending_manual_review(limit=50):
+            if refund.refund_request_id in seen_refunds:
+                continue
+
+            seen_refunds.add(refund.refund_request_id)
+            notifications.append(
+                NotificationResponse(
+                    notification_id=f"refund:{refund.refund_request_id}",
+                    kind="refund",
+                    order_id=refund.order_id,
+                    target_path="/manager/refunds",
+                    status=refund.status,
+                    title="Refund review needed",
+                    message=f"Refund request {refund.refund_request_id} for order {refund.order_id} needs review.",
+                    created_at=refund.created_at,
+                )
+            )
+
+        return notifications
+
+    def _build_admin_support_notifications(self, user: User) -> list[NotificationResponse]:
+        seen_conversations = _LAST_NOTIFIED_ADMIN_SUPPORT.setdefault(user.id, {})
+        notifications: list[NotificationResponse] = []
+
+        conversations = self.support_repository.list_conversations(limit=50, unread_only=True)
+        for row, last_message_at, last_message_preview, unread_message_count in conversations:
+            if unread_message_count <= 0 or last_message_at is None:
+                continue
+
+            last_seen = seen_conversations.get(row.conversation_id)
+            last_message_stamp = last_message_at.isoformat()
+            if last_seen == last_message_stamp:
+                continue
+
+            seen_conversations[row.conversation_id] = last_message_stamp
+            notifications.append(
+                NotificationResponse(
+                    notification_id=f"support:{row.conversation_id}:{last_message_stamp}",
+                    kind="support",
+                    order_id=None,
+                    target_path="/manager/support",
+                    status=row.status,
+                    title="New support message",
+                    message=last_message_preview
+                    or f"Conversation {row.conversation_id} has {int(unread_message_count)} unread message(s).",
+                    created_at=last_message_at,
+                )
+            )
+
         return notifications
 
     @staticmethod

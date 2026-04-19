@@ -24,7 +24,7 @@ class SupportChatService:
         if customer_user.is_guest:
             raise ForbiddenError("Guest users cannot open live support conversations")
 
-        existing = self.support_repository.get_active_conversation_for_customer(customer_user.id)
+        existing = self.support_repository.get_latest_conversation_for_customer(customer_user.id)
         if existing is not None:
             return existing
 
@@ -67,9 +67,6 @@ class SupportChatService:
 
     def send_message(self, *, current_user: User, conversation_id: str, body: str):
         row = self.get_conversation(current_user=current_user, conversation_id=conversation_id)
-        if row.status == "closed":
-            raise ConflictError("Conversation is closed")
-
         if current_user.is_admin:
             if row.assigned_admin_user_id is None:
                 claimed = self.support_repository.claim_conversation(
@@ -114,12 +111,11 @@ class SupportChatService:
         limit: int = 100,
         status: str | None = None,
         priority: str | None = None,
-        assigned_state: str = "all",
+        unread_only: bool = False,
         created_after: datetime | None = None,
         created_before: datetime | None = None,
         updated_after: datetime | None = None,
         updated_before: datetime | None = None,
-        unread_only: bool = False,
     ):
         if not admin_user.is_admin:
             raise ForbiddenError("Admin access required")
@@ -127,12 +123,11 @@ class SupportChatService:
             limit=limit,
             status=status,
             priority=priority,
-            assigned_state=assigned_state,
+            unread_only=unread_only,
             created_after=created_after,
             created_before=created_before,
             updated_after=updated_after,
             updated_before=updated_before,
-            unread_only=unread_only,
         )
 
     def claim_conversation(self, *, admin_user: User, conversation_id: str):
@@ -182,3 +177,8 @@ class SupportChatService:
         if row is None:
             raise NotFoundError("Support conversation not found")
         return row
+
+    def mark_conversation_messages_read(self, *, admin_user: User, conversation_id: str) -> int:
+        if not admin_user.is_admin:
+            raise ForbiddenError("Admin access required")
+        return self.support_repository.mark_conversation_messages_read(conversation_id=conversation_id)

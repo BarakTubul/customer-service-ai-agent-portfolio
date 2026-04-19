@@ -28,7 +28,9 @@ export interface AuthTokenResponse {
 
 export interface LiveNotification {
   notification_id: string;
-  order_id: string;
+  kind?: 'order' | 'refund' | 'support';
+  order_id?: string | null;
+  target_path?: string | null;
   status: string;
   title: string;
   message: string;
@@ -115,6 +117,7 @@ export interface SupportConversationCreateRequest {
 export interface SupportConversationResponse {
   conversation_id: string;
   customer_user_id: number;
+  customer_email?: string | null;
   status: string;
   priority: string;
   assigned_admin_user_id: number | null;

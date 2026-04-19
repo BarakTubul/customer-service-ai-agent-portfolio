@@ -342,30 +342,33 @@ class APIClient {
     return response.data;
   }
 
+  async markSupportConversationRead(conversationId: string): Promise<t.SupportConversationResponse> {
+    const response = await this.client.post<t.SupportConversationResponse>(
+      `/admin/support/conversations/${conversationId}/read`
+    );
+    return response.data;
+  }
+
   async listAdminSupportConversations(params: {
     limit?: number;
-    status?: 'open' | 'assigned' | 'closed' | 'all';
     priority?: 'normal' | 'high' | 'all';
-    assignedState?: 'all' | 'assigned' | 'unassigned';
+    unreadOnly?: boolean;
     createdAfter?: string;
     createdBefore?: string;
     updatedAfter?: string;
     updatedBefore?: string;
-    unreadOnly?: boolean;
   }): Promise<t.SupportConversationListResponse> {
     const response = await this.client.get<t.SupportConversationListResponse>(
       '/admin/support/conversations/all',
       {
         params: {
           limit: params.limit || 100,
-          status: params.status && params.status !== 'all' ? params.status : undefined,
           priority: params.priority && params.priority !== 'all' ? params.priority : undefined,
-          assigned_state: params.assignedState || 'all',
+          unread_only: params.unreadOnly || undefined,
           created_after: params.createdAfter || undefined,
           created_before: params.createdBefore || undefined,
           updated_after: params.updatedAfter || undefined,
           updated_before: params.updatedBefore || undefined,
-          unread_only: params.unreadOnly || undefined,
         },
       }
     );
