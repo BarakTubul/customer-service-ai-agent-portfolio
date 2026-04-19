@@ -16,6 +16,11 @@ export function OrdersPage() {
   const [isStatusFilterTouched, setIsStatusFilterTouched] = useState(false);
   const [dateFromFilter, setDateFromFilter] = useState('');
   const [dateToFilter, setDateToFilter] = useState('');
+  const [refundOrder, setRefundOrder] = useState<t.Order | null>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundError, setRefundError] = useState('');
+  const [refundSuccess, setRefundSuccess] = useState<t.RefundRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -122,6 +127,43 @@ export function OrdersPage() {
     loadData();
   }, [isGuest, user?.email]);
 
+  const openRefundDialog = (order: t.Order) => {
+    setRefundOrder(order);
+    setRefundReason('');
+    setRefundError('');
+    setRefundSuccess(null);
+  };
+
+  const closeRefundDialog = () => {
+    setRefundOrder(null);
+    setRefundReason('');
+    setRefundError('');
+    setRefundSuccess(null);
+  };
+
+  const handleSubmitRefund = async () => {
+    if (!refundOrder || !refundReason) {
+      return;
+    }
+
+    setRefundLoading(true);
+    setRefundError('');
+
+    try {
+      const idempotencyKey = `refund_${refundOrder.order_id}_${refundReason}_${Date.now()}`;
+      const result = await apiClient.createRefundRequest(
+        refundOrder.order_id,
+        refundReason,
+        idempotencyKey
+      );
+      setRefundSuccess(result.refund_request);
+    } catch (err) {
+      setRefundError(err instanceof Error ? err.message : 'Failed to submit refund request');
+    } finally {
+      setRefundLoading(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-6 text-center text-gray-500">Loading orders...</div>;
   }
@@ -207,6 +249,9 @@ export function OrdersPage() {
                     </p>
                   </button>
                   <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => openRefundDialog(order)}>
+                      Refund
+                    </Button>
                     <Button size="sm" onClick={() => navigate(`/orders/${order.order_id}`)} variant="outline">
                       View Order
                     </Button>
@@ -223,6 +268,71 @@ export function OrdersPage() {
           </div>
         )}
       </Card>
+
+      {refundOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <Card className="w-full max-w-lg space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Request a refund</h3>
+                <p className="text-sm text-gray-600">Order: {refundOrder.order_id}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={closeRefundDialog}>
+                Close
+              </Button>
+            </div>
+
+            {refundError && <Alert type="error" message={refundError} onClose={() => setRefundError('')} />}
+
+            {refundSuccess ? (
+              <div className="space-y-3 rounded-lg border border-green-200 bg-green-50 p-4">
+                <p className="font-semibold text-green-900">Refund request submitted</p>
+                <p className="text-sm text-green-800">Request ID: {refundSuccess.refund_request_id}</p>
+                <p className="text-sm text-green-800">Status: {refundSuccess.status}</p>
+                <p className="text-sm text-green-800">
+                  {refundSuccess.manual_review_handoff
+                    ? `This refund is queued for manual review (${refundSuccess.manual_review_handoff.queue_name}).`
+                    : 'This refund was submitted successfully.'}
+                </p>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={closeRefundDialog}>
+                    Done
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Reason for refund</label>
+                  <select
+                    value={refundReason}
+                    onChange={(event) => setRefundReason(event.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Select a reason...</option>
+                    <option value="missing_item">Missing item</option>
+                    <option value="wrong_item">Wrong item</option>
+                    <option value="late_delivery">Late delivery</option>
+                    <option value="quality_issue">Quality issue</option>
+                    <option value="fraud">Fraud / suspicious activity</option>
+                    <option value="abuse">Abuse / policy violation</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button variant="outline" onClick={closeRefundDialog}>
+                    Cancel
+                  </Button>
+                  <Button onClick={() => void handleSubmitRefund()} disabled={!refundReason || refundLoading}>
+                    {refundLoading ? 'Submitting...' : 'Submit refund request'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

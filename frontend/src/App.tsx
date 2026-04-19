@@ -12,7 +12,6 @@ import { OrdersPage } from '@/pages/OrdersPage';
 import { OrderDetailPage } from '@/pages/OrderDetailPage';
 import { OrderTimelinePage } from '@/pages/OrderTimelinePage';
 import { OrderPlacementPage } from '@/pages/OrderPlacementPage';
-import { RefundPage } from '@/pages/RefundPage';
 import { AdminRefundReviewPage } from '@/pages/AdminRefundReviewPage';
 import { AdminSupportInboxPage } from '@/pages/AdminSupportInboxPage';
 
@@ -86,11 +85,7 @@ function AppRoutes() {
         />
         <Route
           path="/refund"
-          element={
-            <ProtectedRoute>
-              <RefundPage />
-            </ProtectedRoute>
-          }
+          element={<Navigate to="/orders" replace />}
         />
         <Route
           path="/support"
