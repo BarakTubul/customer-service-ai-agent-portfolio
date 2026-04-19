@@ -4,14 +4,16 @@ import { Alert, Button, Card, Input } from '@/components/UI';
 import { apiClient } from '@/services/apiClient';
 import * as t from '@/types';
 
-type InboxSection = 'queue' | 'assigned';
-
-interface SupportThreadMessage {
+type ThreadMessage = {
   message_id: string;
   sender_role: string;
   body: string;
   created_at: string;
-}
+};
+
+type ConversationStatusFilter = 'all' | 'open' | 'assigned' | 'closed';
+type ConversationPriorityFilter = 'all' | 'normal' | 'high';
+type ConversationAssignedFilter = 'all' | 'assigned' | 'unassigned';
 
 const THREAD_PAGE_SIZE = 30;
 
@@ -24,23 +26,39 @@ function formatDateTime(value: string) {
   });
 }
 
-function conversationSummary(conversation: t.SupportConversationResponse): string {
-  const parts = [conversation.status, conversation.priority];
-  if (conversation.assigned_admin_user_id) {
-    parts.push(`admin ${conversation.assigned_admin_user_id}`);
+function toIsoDateTime(dateValue: string, endOfDay = false): string | undefined {
+  if (!dateValue) {
+    return undefined;
   }
-  return parts.join(' • ');
+  const suffix = endOfDay ? 'T23:59:59.999' : 'T00:00:00.000';
+  const date = new Date(`${dateValue}${suffix}`);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  return date.toISOString();
+}
+
+function badgeClasses(priority: string, unreadCount: number) {
+  const base = 'inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold';
+
+  const priorityClass = priority === 'high'
+    ? 'bg-rose-100 text-rose-700'
+    : 'bg-slate-100 text-slate-600';
+
+  const unreadClass = unreadCount > 0
+    ? 'bg-rose-600 text-white'
+    : 'bg-emerald-100 text-emerald-700';
+
+  return { base, priorityClass, unreadClass };
 }
 
 export function AdminSupportInboxPage() {
-  const [queue, setQueue] = useState<t.SupportConversationResponse[]>([]);
-  const [assigned, setAssigned] = useState<t.SupportConversationResponse[]>([]);
+  const [conversations, setConversations] = useState<t.SupportConversationResponse[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<t.SupportConversationResponse | null>(null);
-  const [messages, setMessages] = useState<SupportThreadMessage[]>([]);
+  const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [input, setInput] = useState('');
-  const [activeSection, setActiveSection] = useState<InboxSection>('queue');
-  const [loading, setLoading] = useState(true);
+  const [loadingList, setLoadingList] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -48,37 +66,65 @@ export function AdminSupportInboxPage() {
   const [threadLoadingOlder, setThreadLoadingOlder] = useState(false);
   const [threadHasMore, setThreadHasMore] = useState(true);
   const [threadChunkLoadedNotice, setThreadChunkLoadedNotice] = useState(false);
+  const [draftPriority, setDraftPriority] = useState<'normal' | 'high'>('normal');
+  const [statusFilter, setStatusFilter] = useState<ConversationStatusFilter>('all');
+  const [priorityFilter, setPriorityFilter] = useState<ConversationPriorityFilter>('all');
+  const [assignedFilter, setAssignedFilter] = useState<ConversationAssignedFilter>('all');
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [createdAfter, setCreatedAfter] = useState('');
+  const [createdBefore, setCreatedBefore] = useState('');
+  const [updatedAfter, setUpdatedAfter] = useState('');
+  const [updatedBefore, setUpdatedBefore] = useState('');
   const socketRef = useRef<WebSocket | null>(null);
   const messageIdsRef = useRef(new Set<string>());
   const threadContainerRef = useRef<HTMLDivElement | null>(null);
   const threadChunkLoadedTimerRef = useRef<number | null>(null);
 
-  const selectedConversationState = useMemo(() => {
-    if (!selectedConversation) {
-      return null;
-    }
-    return selectedConversation;
-  }, [selectedConversation]);
+  const selectedConversationState = useMemo(() => selectedConversation, [selectedConversation]);
 
-  const loadInbox = async () => {
-    setLoading(true);
+  const upsertConversationInList = (conversation: t.SupportConversationResponse) => {
+    setConversations((current) => {
+      const next = current.filter((item) => item.conversation_id !== conversation.conversation_id);
+      next.push(conversation);
+      next.sort((left, right) => {
+        const rightUpdatedAt = new Date(right.updated_at).getTime();
+        const leftUpdatedAt = new Date(left.updated_at).getTime();
+        if (rightUpdatedAt !== leftUpdatedAt) {
+          return rightUpdatedAt - leftUpdatedAt;
+        }
+
+        const rightCreatedAt = new Date(right.created_at).getTime();
+        const leftCreatedAt = new Date(left.created_at).getTime();
+        return rightCreatedAt - leftCreatedAt;
+      });
+      return next;
+    });
+  };
+
+  const loadConversations = async () => {
+    setLoadingList(true);
     setError('');
     try {
-      const [queueResponse, assignedResponse] = await Promise.all([
-        apiClient.listSupportQueue(100),
-        apiClient.listAssignedSupportConversations(100),
-      ]);
-      setQueue(queueResponse.items);
-      setAssigned(assignedResponse.items);
+      const response = await apiClient.listAdminSupportConversations({
+        limit: 100,
+        status: statusFilter,
+        priority: priorityFilter,
+        assignedState: assignedFilter,
+        createdAfter: toIsoDateTime(createdAfter, false),
+        createdBefore: toIsoDateTime(createdBefore, true),
+        updatedAfter: toIsoDateTime(updatedAfter, false),
+        updatedBefore: toIsoDateTime(updatedBefore, true),
+        unreadOnly,
+      });
+      setConversations(response.items);
 
-      if (!selectedConversationId && queueResponse.items.length > 0) {
-        setSelectedConversationId(queueResponse.items[0].conversation_id);
-        setActiveSection('queue');
+      if (!selectedConversationId && response.items.length > 0) {
+        setSelectedConversationId(response.items[0].conversation_id);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load support inbox');
+      setError(err instanceof Error ? err.message : 'Failed to load support conversations');
     } finally {
-      setLoading(false);
+      setLoadingList(false);
     }
   };
 
@@ -92,6 +138,7 @@ export function AdminSupportInboxPage() {
       ]);
 
       setSelectedConversation(conversationResponse);
+      setDraftPriority(conversationResponse.priority === 'high' ? 'high' : 'normal');
       setMessages(
         messageResponse.items.map((item) => ({
           message_id: item.message_id,
@@ -111,18 +158,19 @@ export function AdminSupportInboxPage() {
   };
 
   useEffect(() => {
-    void loadInbox();
+    void loadConversations();
     return () => {
       if (threadChunkLoadedTimerRef.current !== null) {
         window.clearTimeout(threadChunkLoadedTimerRef.current);
       }
     };
-  }, []);
+  }, [statusFilter, priorityFilter, assignedFilter, unreadOnly, createdAfter, createdBefore, updatedAfter, updatedBefore]);
 
   useEffect(() => {
     if (!selectedConversationId) {
       return;
     }
+
     socketRef.current?.close();
     messageIdsRef.current.clear();
     setThreadLoading(true);
@@ -138,15 +186,12 @@ export function AdminSupportInboxPage() {
 
     socket.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as {
-          type: string;
-          payload?: unknown;
-        };
+        const data = JSON.parse(event.data) as { type: string; payload?: unknown };
 
         if (data.type === 'conversation.snapshot') {
           const payload = data.payload as {
             conversation: t.SupportConversationResponse;
-            messages: SupportThreadMessage[];
+            messages: ThreadMessage[];
           };
           setSelectedConversation(payload.conversation);
           setMessages(payload.messages || []);
@@ -159,22 +204,17 @@ export function AdminSupportInboxPage() {
         if (data.type === 'conversation.updated') {
           const payload = data.payload as t.SupportConversationResponse;
           setSelectedConversation(payload);
-          void loadInbox();
+          setDraftPriority(payload.priority === 'high' ? 'high' : 'normal');
+          upsertConversationInList(payload);
           return;
         }
 
         if (data.type === 'message.new') {
-          const payload = data.payload as SupportThreadMessage;
+          const payload = data.payload as ThreadMessage;
           if (!messageIdsRef.current.has(payload.message_id)) {
             messageIdsRef.current.add(payload.message_id);
             setMessages((current) => [...current, payload]);
           }
-          return;
-        }
-
-        if (data.type === 'error') {
-          const payload = data.payload as { message?: string } | undefined;
-          setError(payload?.message || 'Support websocket error');
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to parse support websocket event');
@@ -195,89 +235,6 @@ export function AdminSupportInboxPage() {
       socketRef.current = null;
     };
   }, [selectedConversationId]);
-
-  const handleSelectConversation = (conversationId: string, section: InboxSection) => {
-    setActiveSection(section);
-    setSelectedConversationId(conversationId);
-  };
-
-  const handleClaim = async (conversationId: string) => {
-    setActionLoading(true);
-    setError('');
-    setSuccess('');
-    try {
-      const claimed = await apiClient.claimSupportConversation(conversationId);
-      setSuccess(`Claimed ${conversationId}.`);
-      setSelectedConversation(claimed);
-      setSelectedConversationId(conversationId);
-      await loadInbox();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to claim conversation');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRelease = async () => {
-    if (!selectedConversation) {
-      return;
-    }
-
-    setActionLoading(true);
-    setError('');
-    setSuccess('');
-    try {
-      const released = await apiClient.releaseSupportConversation(selectedConversation.conversation_id);
-      setSuccess(`Released ${selectedConversation.conversation_id}.`);
-      setSelectedConversation(released);
-      await loadInbox();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to release conversation');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleClose = async () => {
-    if (!selectedConversation) {
-      return;
-    }
-
-    setActionLoading(true);
-    setError('');
-    setSuccess('');
-    try {
-      const closed = await apiClient.closeSupportConversation(selectedConversation.conversation_id);
-      setSuccess(`Closed ${selectedConversation.conversation_id}.`);
-      setSelectedConversation(closed);
-      await loadInbox();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to close conversation');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleSend = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!selectedConversation || !input.trim()) {
-      return;
-    }
-
-    setActionLoading(true);
-    setError('');
-    setSuccess('');
-    try {
-      await apiClient.sendSupportMessage(selectedConversation.conversation_id, input.trim());
-      setInput('');
-      setSuccess('Reply sent.');
-      await loadInbox();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send reply');
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   const loadOlderThreadMessages = async () => {
     if (!selectedConversation || threadLoadingOlder || !threadHasMore) {
@@ -318,6 +275,7 @@ export function AdminSupportInboxPage() {
         deduped.forEach((item) => messageIdsRef.current.add(item.message_id));
         return [...deduped, ...current];
       });
+
       setThreadChunkLoadedNotice(true);
       if (threadChunkLoadedTimerRef.current !== null) {
         window.clearTimeout(threadChunkLoadedTimerRef.current);
@@ -355,13 +313,56 @@ export function AdminSupportInboxPage() {
     }
   };
 
-  const threadStatus = selectedConversationState
-    ? selectedConversationState.status === 'closed'
-      ? 'Closed'
-      : selectedConversationState.assigned_admin_user_id
-        ? `Assigned to ${selectedConversationState.assigned_admin_user_id}`
-        : 'Unassigned'
-    : 'Select a conversation';
+  const handleSelectConversation = (conversationId: string) => {
+    setSelectedConversationId(conversationId);
+  };
+
+  const handlePrioritySave = async () => {
+    if (!selectedConversation) {
+      return;
+    }
+
+    setActionLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await apiClient.updateSupportConversationPriority(
+        selectedConversation.conversation_id,
+        draftPriority
+      );
+      setSelectedConversation(updated);
+      setDraftPriority(updated.priority === 'high' ? 'high' : 'normal');
+      upsertConversationInList(updated);
+      setSuccess(`Marked ${selectedConversation.conversation_id} as ${updated.priority}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update urgency');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSend = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedConversation || !input.trim()) {
+      return;
+    }
+
+    setActionLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await apiClient.sendSupportMessage(selectedConversation.conversation_id, input.trim());
+      setInput('');
+      setSuccess('Reply sent.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send reply');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const selectedUnreadCount = selectedConversationState?.unread_message_count || 0;
+  const selectedLastMessage = selectedConversationState?.last_message_preview || 'No preview available';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-white px-4 py-6">
@@ -370,89 +371,171 @@ export function AdminSupportInboxPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-700">Admin support inbox</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Live customer conversations</h1>
-            <p className="mt-2 text-sm text-slate-600">Claim a conversation, reply in-thread, then release or close it when finished.</p>
+            <p className="mt-2 text-sm text-slate-600">All conversations in one list with unread markers, urgency, and time filters.</p>
           </div>
-          <Button onClick={() => void loadInbox()} disabled={loading || actionLoading} variant="outline">
-            {loading ? 'Refreshing...' : 'Refresh inbox'}
+          <Button onClick={() => void loadConversations()} disabled={loadingList || actionLoading} variant="outline">
+            {loadingList ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
 
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
         {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
 
+        <Card className="border border-slate-200 bg-white shadow-xl">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as ConversationStatusFilter)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="assigned">Assigned</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Urgency</label>
+              <select
+                value={priorityFilter}
+                onChange={(event) => setPriorityFilter(event.target.value as ConversationPriorityFilter)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="all">All</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Assignment</label>
+              <select
+                value={assignedFilter}
+                onChange={(event) => setAssignedFilter(event.target.value as ConversationAssignedFilter)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="all">All</option>
+                <option value="assigned">Assigned</option>
+                <option value="unassigned">Unassigned</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Created from</label>
+              <Input type="date" value={createdAfter} onChange={(event) => setCreatedAfter(event.target.value)} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Created to</label>
+              <Input type="date" value={createdBefore} onChange={(event) => setCreatedBefore(event.target.value)} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Updated from</label>
+              <Input type="date" value={updatedAfter} onChange={(event) => setUpdatedAfter(event.target.value)} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Updated to</label>
+              <Input type="date" value={updatedBefore} onChange={(event) => setUpdatedBefore(event.target.value)} />
+            </div>
+
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={unreadOnly}
+                  onChange={(event) => setUnreadOnly(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Unread only
+              </label>
+            </div>
+
+            <div className="flex items-end gap-2 lg:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setStatusFilter('all');
+                  setPriorityFilter('all');
+                  setAssignedFilter('all');
+                  setUnreadOnly(false);
+                  setCreatedAfter('');
+                  setCreatedBefore('');
+                  setUpdatedAfter('');
+                  setUpdatedBefore('');
+                }}
+              >
+                Clear filters
+              </Button>
+            </div>
+          </div>
+        </Card>
+
         <div className="grid gap-6 lg:grid-cols-[1.05fr_1.15fr]">
           <Card className="border border-slate-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Queues</h2>
-                <p className="text-sm text-slate-500">Open and assigned conversations.</p>
-              </div>
-              <div className="flex gap-2 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setActiveSection('queue')}
-                  className={`rounded-full px-3 py-1.5 ${activeSection === 'queue' ? 'bg-cyan-600 text-white' : 'bg-slate-100 text-slate-600'}`}
-                >
-                  Queue ({queue.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSection('assigned')}
-                  className={`rounded-full px-3 py-1.5 ${activeSection === 'assigned' ? 'bg-cyan-600 text-white' : 'bg-slate-100 text-slate-600'}`}
-                >
-                  Assigned ({assigned.length})
-                </button>
+                <h2 className="text-lg font-bold text-slate-900">Conversations ({conversations.length})</h2>
+                <p className="text-sm text-slate-500">Newest activity first.</p>
               </div>
             </div>
 
             <div className="mt-4 space-y-3">
-              {activeSection === 'queue' ? (
-                queue.length === 0 ? (
-                  <p className="text-sm text-slate-500">No open conversations in the queue.</p>
-                ) : (
-                  queue.map((conversation) => (
-                    <div
-                      key={conversation.conversation_id}
-                      className={`rounded-2xl border p-4 transition ${selectedConversationId === conversation.conversation_id ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200 bg-slate-50'}`}
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <button
-                          type="button"
-                          className="text-left"
-                          onClick={() => handleSelectConversation(conversation.conversation_id, 'queue')}
-                        >
-                          <p className="font-semibold text-slate-900">{conversation.conversation_id}</p>
-                          <p className="text-xs text-slate-600">Customer {conversation.customer_user_id}</p>
-                          <p className="text-xs text-slate-600">{conversationSummary(conversation)}</p>
-                          <p className="text-xs text-slate-500">Created {formatDateTime(conversation.created_at)}</p>
-                        </button>
-                        <Button size="sm" onClick={() => void handleClaim(conversation.conversation_id)} disabled={actionLoading}>
-                          Claim
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                )
-              ) : assigned.length === 0 ? (
-                <p className="text-sm text-slate-500">No assigned conversations.</p>
+              {conversations.length === 0 ? (
+                <p className="text-sm text-slate-500">No conversations match the current filters.</p>
               ) : (
-                assigned.map((conversation) => (
-                  <div
-                    key={conversation.conversation_id}
-                    className={`rounded-2xl border p-4 transition ${selectedConversationId === conversation.conversation_id ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200 bg-slate-50'}`}
-                  >
+                conversations.map((conversation) => {
+                  const isSelected = selectedConversationId === conversation.conversation_id;
+                  const unreadCount = conversation.unread_message_count || 0;
+                  const unreadBadge = badgeClasses(conversation.priority, unreadCount);
+                  return (
                     <button
+                      key={conversation.conversation_id}
                       type="button"
-                      className="w-full text-left"
-                      onClick={() => handleSelectConversation(conversation.conversation_id, 'assigned')}
+                      onClick={() => handleSelectConversation(conversation.conversation_id)}
+                      className={`w-full rounded-2xl border p-4 text-left transition ${
+                        isSelected ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                      }`}
                     >
-                      <p className="font-semibold text-slate-900">{conversation.conversation_id}</p>
-                      <p className="text-xs text-slate-600">Customer {conversation.customer_user_id}</p>
-                      <p className="text-xs text-slate-600">{conversationSummary(conversation)}</p>
-                      <p className="text-xs text-slate-500">Updated {formatDateTime(conversation.updated_at)}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-slate-900">{conversation.conversation_id}</p>
+                            {unreadCount > 0 ? (
+                              <span className={`${unreadBadge.base} ${unreadBadge.unreadClass}`}>
+                                {unreadCount} new
+                              </span>
+                            ) : (
+                              <span className={`${unreadBadge.base} ${unreadBadge.priorityClass}`}>
+                                caught up
+                              </span>
+                            )}
+                            <span className={`${unreadBadge.base} ${unreadBadge.priorityClass}`}>
+                              {conversation.priority}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-600">Customer {conversation.customer_user_id}</p>
+                          <p className="text-xs text-slate-600">Status: {conversation.status}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Last activity: {conversation.last_message_at ? formatDateTime(conversation.last_message_at) : 'No messages yet'}
+                          </p>
+                          <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                            {conversation.last_message_preview || 'No preview available'}
+                          </p>
+                        </div>
+                        <div className="text-right text-xs text-slate-500">
+                          <p>Updated {formatDateTime(conversation.updated_at)}</p>
+                          <p>{conversation.assigned_admin_user_id ? `Admin ${conversation.assigned_admin_user_id}` : 'Unassigned'}</p>
+                        </div>
+                      </div>
                     </button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </Card>
@@ -462,7 +545,7 @@ export function AdminSupportInboxPage() {
               <div className="flex h-full min-h-[28rem] items-center justify-center text-center text-slate-500">
                 <div>
                   <p className="text-lg font-semibold text-slate-900">No conversation selected</p>
-                  <p className="mt-2 text-sm">Choose a queue item or assigned conversation to open the thread.</p>
+                  <p className="mt-2 text-sm">Choose any conversation from the list to open the thread.</p>
                 </div>
               </div>
             ) : (
@@ -473,20 +556,29 @@ export function AdminSupportInboxPage() {
                       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-700">Conversation</p>
                       <h2 className="mt-1 text-xl font-bold text-slate-900">{selectedConversation.conversation_id}</h2>
                       <p className="text-sm text-slate-500">Customer {selectedConversation.customer_user_id}</p>
-                      <p className="text-sm text-slate-500">{threadStatus}</p>
+                      <p className="text-sm text-slate-500">
+                        {selectedConversation.status} • {selectedConversation.priority} • {selectedUnreadCount} unread
+                      </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => void handleClaim(selectedConversation.conversation_id)} disabled={actionLoading}>
-                        Claim
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => void handleRelease()} disabled={actionLoading || !selectedConversation.assigned_admin_user_id}>
-                        Release
-                      </Button>
-                      <Button size="sm" variant="secondary" onClick={() => void handleClose()} disabled={actionLoading || selectedConversation.status === 'closed'}>
-                        Close
-                      </Button>
+                    <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Urgency</label>
+                      <div className="flex flex-wrap gap-2">
+                        <select
+                          value={draftPriority}
+                          onChange={(event) => setDraftPriority(event.target.value === 'high' ? 'high' : 'normal')}
+                          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                          disabled={actionLoading}
+                        >
+                          <option value="normal">Normal</option>
+                          <option value="high">High</option>
+                        </select>
+                        <Button size="sm" onClick={() => void handlePrioritySave()} disabled={actionLoading || draftPriority === selectedConversation.priority}>
+                          Save urgency
+                        </Button>
+                      </div>
                     </div>
                   </div>
+                  <p className="mt-3 text-xs text-slate-500">Last message: {selectedLastMessage}</p>
                 </div>
 
                 <div
@@ -496,17 +588,17 @@ export function AdminSupportInboxPage() {
                 >
                   <div className="space-y-3">
                     {threadLoadingOlder && (
-                      <p className="text-xs text-center text-slate-500 inline-flex w-full items-center justify-center gap-2">
+                      <div className="flex w-full items-center justify-center gap-2 py-1 text-xs text-slate-500">
                         <span>Loading older messages</span>
                         <span className="inline-flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
                           <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse [animation-delay:120ms]" />
                           <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse [animation-delay:240ms]" />
                         </span>
-                      </p>
+                      </div>
                     )}
                     {threadChunkLoadedNotice && !threadLoadingOlder && (
-                      <p className="text-xs text-center text-emerald-600">Older messages loaded</p>
+                      <p className="text-center text-xs text-emerald-600">Older messages loaded</p>
                     )}
                     {threadLoading ? (
                       <p className="text-sm text-slate-500">Loading thread...</p>

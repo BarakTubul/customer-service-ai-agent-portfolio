@@ -124,6 +124,9 @@ export interface SupportConversationResponse {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  last_message_at?: string | null;
+  last_message_preview?: string | null;
+  unread_message_count?: number;
 }
 
 export interface SupportConversationListResponse {

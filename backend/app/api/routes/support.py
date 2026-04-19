@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.support import (
     SupportConversationCreateRequest,
+    SupportConversationPriorityUpdateRequest,
     SupportConversationListResponse,
     SupportConversationResponse,
     SupportMessageCreateRequest,
@@ -71,6 +72,14 @@ def _conversation_to_response(row) -> SupportConversationResponse:
         updated_at=row.updated_at,
         closed_at=row.closed_at,
     )
+
+
+def _conversation_summary_to_response(row, last_message_at, last_message_preview, unread_message_count) -> SupportConversationResponse:
+    response = _conversation_to_response(row)
+    response.last_message_at = last_message_at
+    response.last_message_preview = last_message_preview
+    response.unread_message_count = int(unread_message_count or 0)
+    return response
 
 
 def _message_to_response(row) -> SupportMessageResponse:
@@ -208,6 +217,39 @@ def list_assigned_support_conversations(
     return SupportConversationListResponse(items=items, total=len(items))
 
 
+@router.get("/admin/support/conversations/all", response_model=SupportConversationListResponse)
+def list_all_support_conversations(
+    limit: int = Query(default=100, ge=1, le=500),
+    status: str | None = Query(default=None, pattern="^(open|assigned|closed)$"),
+    priority: str | None = Query(default=None, pattern="^(normal|high)$"),
+    assigned_state: str = Query(default="all", pattern="^(all|assigned|unassigned)$"),
+    created_after: datetime | None = Query(default=None),
+    created_before: datetime | None = Query(default=None),
+    updated_after: datetime | None = Query(default=None),
+    updated_before: datetime | None = Query(default=None),
+    unread_only: bool = Query(default=False),
+    admin_user: User = Depends(require_admin_user),
+    support_chat_service: SupportChatService = Depends(get_support_chat_service),
+) -> SupportConversationListResponse:
+    rows = support_chat_service.list_admin_conversations(
+        admin_user=admin_user,
+        limit=limit,
+        status=status,
+        priority=priority,
+        assigned_state=assigned_state,
+        created_after=created_after,
+        created_before=created_before,
+        updated_after=updated_after,
+        updated_before=updated_before,
+        unread_only=unread_only,
+    )
+    items = [
+        _conversation_summary_to_response(row[0], row[1], row[2], row[3])
+        for row in rows
+    ]
+    return SupportConversationListResponse(items=items, total=len(items))
+
+
 @router.post("/admin/support/conversations/{conversation_id}/claim", response_model=SupportConversationResponse)
 async def claim_support_conversation(
     conversation_id: str,
@@ -253,6 +295,30 @@ async def close_support_conversation(
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.close_conversation(admin_user=admin_user, conversation_id=conversation_id)
+    await support_ws_manager.broadcast_json(
+        conversation_id,
+        {
+            "type": "conversation.updated",
+            "conversation_id": conversation_id,
+            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
+    return _conversation_to_response(row)
+
+
+@router.patch("/admin/support/conversations/{conversation_id}/priority", response_model=SupportConversationResponse)
+async def update_support_conversation_priority(
+    conversation_id: str,
+    payload: SupportConversationPriorityUpdateRequest,
+    admin_user: User = Depends(require_admin_user),
+    support_chat_service: SupportChatService = Depends(get_support_chat_service),
+) -> SupportConversationResponse:
+    row = support_chat_service.update_conversation_priority(
+        admin_user=admin_user,
+        conversation_id=conversation_id,
+        priority=payload.priority,
+    )
     await support_ws_manager.broadcast_json(
         conversation_id,
         {

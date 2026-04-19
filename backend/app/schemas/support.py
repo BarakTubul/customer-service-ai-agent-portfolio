@@ -24,6 +24,13 @@ class SupportConversationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     closed_at: datetime | None
+    last_message_at: datetime | None = None
+    last_message_preview: str | None = None
+    unread_message_count: int = 0
+
+
+class SupportConversationPriorityUpdateRequest(BaseModel):
+    priority: str = Field(pattern="^(normal|high)$")
 
 
 class SupportConversationListResponse(BaseModel):

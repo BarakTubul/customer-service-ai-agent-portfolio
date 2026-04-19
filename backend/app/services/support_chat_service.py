@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
 
 from app.core.errors import ConflictError
@@ -106,6 +107,34 @@ class SupportChatService:
             raise ForbiddenError("Admin access required")
         return self.support_repository.list_assigned_to_admin(admin_user_id=admin_user.id, limit=limit)
 
+    def list_admin_conversations(
+        self,
+        *,
+        admin_user: User,
+        limit: int = 100,
+        status: str | None = None,
+        priority: str | None = None,
+        assigned_state: str = "all",
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        updated_after: datetime | None = None,
+        updated_before: datetime | None = None,
+        unread_only: bool = False,
+    ):
+        if not admin_user.is_admin:
+            raise ForbiddenError("Admin access required")
+        return self.support_repository.list_conversations(
+            limit=limit,
+            status=status,
+            priority=priority,
+            assigned_state=assigned_state,
+            created_after=created_after,
+            created_before=created_before,
+            updated_after=updated_after,
+            updated_before=updated_before,
+            unread_only=unread_only,
+        )
+
     def claim_conversation(self, *, admin_user: User, conversation_id: str):
         if not admin_user.is_admin:
             raise ForbiddenError("Admin access required")
@@ -141,3 +170,15 @@ class SupportChatService:
         if closed is None:
             raise ConflictError("Conversation cannot be closed in current state")
         return closed
+
+    def update_conversation_priority(self, *, admin_user: User, conversation_id: str, priority: str):
+        if not admin_user.is_admin:
+            raise ForbiddenError("Admin access required")
+
+        row = self.support_repository.update_conversation_priority(
+            conversation_id=conversation_id,
+            priority=priority,
+        )
+        if row is None:
+            raise NotFoundError("Support conversation not found")
+        return row

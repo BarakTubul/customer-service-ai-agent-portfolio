@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.support_conversation import SupportConversation
@@ -74,6 +74,83 @@ class SupportRepository:
         )
         return list(self.db.scalars(stmt).all())
 
+    def list_conversations(
+        self,
+        *,
+        limit: int = 100,
+        status: str | None = None,
+        priority: str | None = None,
+        assigned_state: str = "all",
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        updated_after: datetime | None = None,
+        updated_before: datetime | None = None,
+        unread_only: bool = False,
+    ):
+        bounded = max(1, min(limit, 500))
+
+        last_admin_at = (
+            select(func.max(SupportMessage.created_at))
+            .where(SupportMessage.conversation_id == SupportConversation.conversation_id)
+            .where(SupportMessage.sender_role == "admin")
+            .correlate(SupportConversation)
+            .scalar_subquery()
+        )
+
+        unread_message_count = (
+            select(func.count(SupportMessage.id))
+            .where(SupportMessage.conversation_id == SupportConversation.conversation_id)
+            .where(SupportMessage.sender_role == "customer")
+            .where(or_(last_admin_at.is_(None), SupportMessage.created_at > last_admin_at))
+            .correlate(SupportConversation)
+            .scalar_subquery()
+        )
+
+        last_message_at = (
+            select(func.max(SupportMessage.created_at))
+            .where(SupportMessage.conversation_id == SupportConversation.conversation_id)
+            .correlate(SupportConversation)
+            .scalar_subquery()
+        )
+
+        last_message_preview = (
+            select(SupportMessage.body)
+            .where(SupportMessage.conversation_id == SupportConversation.conversation_id)
+            .order_by(SupportMessage.created_at.desc(), SupportMessage.id.desc())
+            .limit(1)
+            .correlate(SupportConversation)
+            .scalar_subquery()
+        )
+
+        stmt = select(
+            SupportConversation,
+            last_message_at.label("last_message_at"),
+            last_message_preview.label("last_message_preview"),
+            unread_message_count.label("unread_message_count"),
+        )
+
+        if status:
+            stmt = stmt.where(SupportConversation.status == status)
+        if priority:
+            stmt = stmt.where(SupportConversation.priority == priority)
+        if assigned_state == "assigned":
+            stmt = stmt.where(SupportConversation.assigned_admin_user_id.is_not(None))
+        elif assigned_state == "unassigned":
+            stmt = stmt.where(SupportConversation.assigned_admin_user_id.is_(None))
+        if created_after is not None:
+            stmt = stmt.where(SupportConversation.created_at >= created_after)
+        if created_before is not None:
+            stmt = stmt.where(SupportConversation.created_at <= created_before)
+        if updated_after is not None:
+            stmt = stmt.where(SupportConversation.updated_at >= updated_after)
+        if updated_before is not None:
+            stmt = stmt.where(SupportConversation.updated_at <= updated_before)
+        if unread_only:
+            stmt = stmt.where(unread_message_count > 0)
+
+        stmt = stmt.order_by(SupportConversation.updated_at.desc(), SupportConversation.created_at.desc()).limit(bounded)
+        return list(self.db.execute(stmt).all())
+
     def claim_conversation(self, *, conversation_id: str, admin_user_id: int) -> SupportConversation | None:
         row = self.get_conversation_by_id(conversation_id)
         if row is None or row.status == "closed":
@@ -115,6 +192,19 @@ class SupportRepository:
         row.status = "closed"
         row.closed_at = now
         row.updated_at = now
+
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return row
+
+    def update_conversation_priority(self, *, conversation_id: str, priority: str) -> SupportConversation | None:
+        row = self.get_conversation_by_id(conversation_id)
+        if row is None:
+            return None
+
+        row.priority = priority
+        row.updated_at = datetime.now(UTC)
 
         self.db.add(row)
         self.db.commit()
