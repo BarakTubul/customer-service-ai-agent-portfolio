@@ -85,11 +85,16 @@ export function AdminSupportInboxPage() {
 
   const upsertConversationInList = (conversation: t.SupportConversationResponse) => {
     setConversations((current) => {
+      const existing = current.find((item) => item.conversation_id === conversation.conversation_id);
+      const mergedConversation: t.SupportConversationResponse = {
+        ...conversation,
+        customer_email: conversation.customer_email || existing?.customer_email || null,
+      };
       const next = current.filter((item) => item.conversation_id !== conversation.conversation_id);
-      if (unreadOnly && (conversation.unread_message_count || 0) === 0) {
+      if (unreadOnly && (mergedConversation.unread_message_count || 0) === 0) {
         return next;
       }
-      next.push(conversation);
+      next.push(mergedConversation);
       next.sort((left, right) => {
         const rightUpdatedAt = new Date(right.updated_at).getTime();
         const leftUpdatedAt = new Date(left.updated_at).getTime();

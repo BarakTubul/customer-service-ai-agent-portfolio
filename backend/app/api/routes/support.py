@@ -83,6 +83,16 @@ def _conversation_to_response_with_email(row, db: Session) -> SupportConversatio
     return response
 
 
+def _conversation_to_response_for_user(row, *, current_user: User, db: Session) -> SupportConversationResponse:
+    if current_user.is_admin:
+        return _conversation_to_response_with_email(row, db)
+
+    response = _conversation_to_response(row)
+    if row.customer_user_id == current_user.id:
+        response.customer_email = current_user.email
+    return response
+
+
 def _conversation_summary_to_response(row, last_message_at, last_message_preview, unread_message_count) -> SupportConversationResponse:
     response = _conversation_to_response(row)
     response.last_message_at = last_message_at
@@ -180,6 +190,7 @@ async def send_support_message(
     conversation_id: str,
     payload: SupportMessageCreateRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportMessageResponse:
     row = support_chat_service.send_message(
@@ -197,7 +208,11 @@ async def send_support_message(
         {
             "type": "conversation.updated",
             "conversation_id": conversation_id,
-            "payload": _conversation_to_response(updated_conversation).model_dump(mode="json"),
+            "payload": _conversation_to_response_for_user(
+                updated_conversation,
+                current_user=current_user,
+                db=db,
+            ).model_dump(mode="json"),
             "timestamp": datetime.now(UTC).isoformat(),
         },
     )
@@ -274,6 +289,7 @@ def list_all_support_conversations(
 async def claim_support_conversation(
     conversation_id: str,
     admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.claim_conversation(admin_user=admin_user, conversation_id=conversation_id)
@@ -282,17 +298,18 @@ async def claim_support_conversation(
         {
             "type": "conversation.updated",
             "conversation_id": conversation_id,
-            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "payload": _conversation_to_response_with_email(row, db).model_dump(mode="json"),
             "timestamp": datetime.now(UTC).isoformat(),
         },
     )
-    return _conversation_to_response(row)
+    return _conversation_to_response_with_email(row, db)
 
 
 @router.post("/admin/support/conversations/{conversation_id}/release", response_model=SupportConversationResponse)
 async def release_support_conversation(
     conversation_id: str,
     admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.release_conversation(admin_user=admin_user, conversation_id=conversation_id)
@@ -301,17 +318,18 @@ async def release_support_conversation(
         {
             "type": "conversation.updated",
             "conversation_id": conversation_id,
-            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "payload": _conversation_to_response_with_email(row, db).model_dump(mode="json"),
             "timestamp": datetime.now(UTC).isoformat(),
         },
     )
-    return _conversation_to_response(row)
+    return _conversation_to_response_with_email(row, db)
 
 
 @router.post("/admin/support/conversations/{conversation_id}/close", response_model=SupportConversationResponse)
 async def close_support_conversation(
     conversation_id: str,
     admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.close_conversation(admin_user=admin_user, conversation_id=conversation_id)
@@ -320,11 +338,11 @@ async def close_support_conversation(
         {
             "type": "conversation.updated",
             "conversation_id": conversation_id,
-            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "payload": _conversation_to_response_with_email(row, db).model_dump(mode="json"),
             "timestamp": datetime.now(UTC).isoformat(),
         },
     )
-    return _conversation_to_response(row)
+    return _conversation_to_response_with_email(row, db)
 
 
 @router.patch("/admin/support/conversations/{conversation_id}/priority", response_model=SupportConversationResponse)
@@ -332,6 +350,7 @@ async def update_support_conversation_priority(
     conversation_id: str,
     payload: SupportConversationPriorityUpdateRequest,
     admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     row = support_chat_service.update_conversation_priority(
@@ -344,17 +363,18 @@ async def update_support_conversation_priority(
         {
             "type": "conversation.updated",
             "conversation_id": conversation_id,
-            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "payload": _conversation_to_response_with_email(row, db).model_dump(mode="json"),
             "timestamp": datetime.now(UTC).isoformat(),
         },
     )
-    return _conversation_to_response(row)
+    return _conversation_to_response_with_email(row, db)
 
 
 @router.post("/admin/support/conversations/{conversation_id}/read", response_model=SupportConversationResponse)
 async def mark_support_conversation_read(
     conversation_id: str,
     admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
     support_chat_service: SupportChatService = Depends(get_support_chat_service),
 ) -> SupportConversationResponse:
     support_chat_service.mark_conversation_messages_read(admin_user=admin_user, conversation_id=conversation_id)
@@ -364,11 +384,11 @@ async def mark_support_conversation_read(
         {
             "type": "conversation.updated",
             "conversation_id": conversation_id,
-            "payload": _conversation_to_response(row).model_dump(mode="json"),
+            "payload": _conversation_to_response_with_email(row, db).model_dump(mode="json"),
             "timestamp": datetime.now(UTC).isoformat(),
         },
     )
-    return _conversation_to_response(row)
+    return _conversation_to_response_with_email(row, db)
 
 
 @router.websocket("/ws/support/{conversation_id}")
@@ -405,7 +425,11 @@ async def stream_support_conversation(websocket: WebSocket, conversation_id: str
             "type": "conversation.snapshot",
             "conversation_id": conversation_id,
             "payload": {
-                "conversation": _conversation_to_response(conversation).model_dump(mode="json"),
+                "conversation": _conversation_to_response_for_user(
+                    conversation,
+                    current_user=user,
+                    db=db,
+                ).model_dump(mode="json"),
                 "messages": [
                     _message_to_response(row).model_dump(mode="json")
                     for row in support_chat_service.list_messages(
@@ -476,7 +500,11 @@ async def stream_support_conversation(websocket: WebSocket, conversation_id: str
                 {
                     "type": "conversation.updated",
                     "conversation_id": conversation_id,
-                    "payload": _conversation_to_response(updated_conversation).model_dump(mode="json"),
+                    "payload": _conversation_to_response_for_user(
+                        updated_conversation,
+                        current_user=user,
+                        db=db,
+                    ).model_dump(mode="json"),
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
             )
