@@ -12,6 +12,8 @@ from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
 from app.services.refund_policy_engine import RefundPolicyEngine
 from app.schemas.refund import (
+    ManualReviewDecision,
+    ManualReviewEscalationStatus,
     ManualReviewHandoff,
     ManualReviewQueueItem,
     ManualReviewQueueResponse,
@@ -20,6 +22,7 @@ from app.schemas.refund import (
     RefundCreateRequest,
     RefundEligibilityCheckRequest,
     RefundEligibilityCheckResponse,
+    RefundRequestStatus,
     RefundResolutionAction,
     RefundRequestResponse,
 )
@@ -29,10 +32,16 @@ class RefundService:
     MANUAL_REVIEW_QUEUE_NAME = "refund-risk-review"
     MANUAL_REVIEW_SLA_HOURS = 24
 
-    def __init__(self, order_repository: OrderRepository, refund_repository: RefundRepository) -> None:
+    def __init__(
+        self,
+        order_repository: OrderRepository,
+        refund_repository: RefundRepository,
+        refund_window_hours: int = 48,
+    ) -> None:
         self.order_repository = order_repository
         self.refund_repository = refund_repository
         self.policy_engine = RefundPolicyEngine()
+        self.refund_window_hours = max(1, refund_window_hours)
 
     def check_eligibility(self, *, user: User, payload: RefundEligibilityCheckRequest) -> RefundEligibilityCheckResponse:
         order = self._get_owned_order(user=user, order_id=payload.order_id)
@@ -43,17 +52,23 @@ class RefundService:
             simulation_scenario_id=payload.simulation_scenario_id,
             fulfillment_state=simulated_state["fulfillment_state"],
             payment_state=simulated_state["payment_state"],
+            refund_window_hours=self.refund_window_hours,
+            order_age_hours=self._calculate_order_age_hours(order),
         )
+        refundable_amount_value = self._compute_refundable_amount(order_total_cents=order.total_cents, refund_ratio=decision.refundable_ratio)
+        explanation_params = dict(decision.explanation_params)
+        explanation_params["order_total_cents"] = order.total_cents or 0
+        explanation_params["refundable_amount"] = refundable_amount_value
 
         return RefundEligibilityCheckResponse(
             eligible=decision.eligible,
             resolution_action=decision.resolution_action,
             decision_reason_codes=decision.decision_reason_codes,
             explanation_template_key=decision.explanation_template_key,
-            explanation_params=decision.explanation_params,
+            explanation_params=explanation_params,
             policy_version=decision.policy_version,
             policy_reference=decision.policy_reference,
-            refundable_amount=MoneyAmount(currency="USD", value=decision.refundable_amount_value),
+            refundable_amount=MoneyAmount(currency="USD", value=refundable_amount_value),
             simulated_state=simulated_state["fulfillment_state"],
         )
 
@@ -101,9 +116,9 @@ class RefundService:
             eligibility=eligibility,
         )
 
-        status = "submitted" if eligibility.eligible else "denied"
+        status = RefundRequestStatus.SUBMITTED if eligibility.eligible else RefundRequestStatus.DENIED
         if manual_review_handoff is not None:
-            status = "pending_manual_review"
+            status = RefundRequestStatus.PENDING_MANUAL_REVIEW
         status_reason = None if eligibility.eligible else ",".join(eligibility.decision_reason_codes)
 
         request_id = hashlib.sha256(
@@ -170,13 +185,14 @@ class RefundService:
         items = [self._build_manual_review_queue_item(row) for row in rows if row.escalation_status is not None]
         return ManualReviewQueueResponse(items=items, total=len(items))
 
-    def claim_manual_review_request(self, *, refund_request_id: str) -> RefundRequestResponse:
+    def claim_manual_review_request(self, *, refund_request_id: str, admin_user_id: int) -> RefundRequestResponse:
         row = self.refund_repository.get_by_refund_request_id(refund_request_id)
         if row is None:
             raise NotFoundError("Refund request not found")
         transitioned = self.refund_repository.transition_escalation_status(
             refund_request_id=refund_request_id,
-            to_status="in_review",
+            to_status=ManualReviewEscalationStatus.IN_REVIEW,
+            actor_admin_user_id=admin_user_id,
         )
         if transitioned is None:
             raise ConflictError("Refund request cannot be claimed in current state")
@@ -186,8 +202,9 @@ class RefundService:
         self,
         *,
         refund_request_id: str,
-        decision: str,
+        decision: ManualReviewDecision,
         reviewer_note: str | None,
+        admin_user_id: int,
     ) -> RefundRequestResponse:
         row = self.refund_repository.get_by_refund_request_id(refund_request_id)
         if row is None:
@@ -195,6 +212,7 @@ class RefundService:
         transitioned = self.refund_repository.transition_escalation_status(
             refund_request_id=refund_request_id,
             to_status=decision,
+            actor_admin_user_id=admin_user_id,
             reviewer_note=reviewer_note,
         )
         if transitioned is None:
@@ -274,7 +292,7 @@ class RefundService:
 
         created_at = datetime.now(UTC)
         return ManualReviewHandoff(
-            escalation_status="queued",
+            escalation_status=ManualReviewEscalationStatus.QUEUED,
             queue_name=self.MANUAL_REVIEW_QUEUE_NAME,
             sla_deadline_at=created_at + timedelta(hours=self.MANUAL_REVIEW_SLA_HOURS),
             payload={
@@ -303,6 +321,11 @@ class RefundService:
             queue_name=row.escalation_queue_name,
             sla_deadline_at=row.escalation_sla_deadline_at,
             payload=payload,
+            claimed_by_admin_user_id=row.claimed_by_admin_user_id,
+            claimed_at=row.claimed_at,
+            decided_by_admin_user_id=row.decided_by_admin_user_id,
+            decided_at=row.decided_at,
+            reviewer_note=row.reviewer_note,
         )
 
     def _build_manual_review_queue_item(self, row) -> ManualReviewQueueItem:
@@ -333,3 +356,16 @@ class RefundService:
         if isinstance(value, Enum):
             return str(value.value)
         return value
+
+    @staticmethod
+    def _compute_refundable_amount(*, order_total_cents: int | None, refund_ratio: float) -> float:
+        if not order_total_cents or order_total_cents <= 0:
+            return 0.0
+        computed_cents = round(order_total_cents * max(0.0, min(refund_ratio, 1.0)))
+        return computed_cents / 100.0
+
+    @staticmethod
+    def _calculate_order_age_hours(order) -> float:
+        updated_at = order.updated_at.astimezone(UTC)
+        age_seconds = (datetime.now(UTC) - updated_at).total_seconds()
+        return max(0.0, age_seconds / 3600.0)

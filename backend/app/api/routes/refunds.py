@@ -83,8 +83,10 @@ def claim_manual_review_request(
     admin_user: User = Depends(require_admin_user),
     refund_service: RefundService = Depends(get_refund_service),
 ) -> RefundRequestResponse:
-    _ = admin_user
-    return refund_service.claim_manual_review_request(refund_request_id=refund_request_id)
+    return refund_service.claim_manual_review_request(
+        refund_request_id=refund_request_id,
+        admin_user_id=admin_user.id,
+    )
 
 
 @router.post("/admin/refunds/requests/{refund_request_id}/decision", response_model=RefundRequestResponse)
@@ -94,9 +96,9 @@ def decide_manual_review_request(
     admin_user: User = Depends(require_admin_user),
     refund_service: RefundService = Depends(get_refund_service),
 ) -> RefundRequestResponse:
-    _ = admin_user
     return refund_service.decide_manual_review_request(
         refund_request_id=refund_request_id,
         decision=payload.decision,
         reviewer_note=payload.reviewer_note,
+        admin_user_id=admin_user.id,
     )

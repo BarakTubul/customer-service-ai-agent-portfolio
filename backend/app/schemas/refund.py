@@ -38,6 +38,25 @@ class RefundResolutionAction(str, Enum):
     MANUAL_REVIEW = "manual_review"
 
 
+class RefundRequestStatus(str, Enum):
+    SUBMITTED = "submitted"
+    DENIED = "denied"
+    PENDING_MANUAL_REVIEW = "pending_manual_review"
+    RESOLVED = "resolved"
+
+
+class ManualReviewEscalationStatus(str, Enum):
+    QUEUED = "queued"
+    IN_REVIEW = "in_review"
+    RESOLVED = "resolved"
+    REJECTED = "rejected"
+
+
+class ManualReviewDecision(str, Enum):
+    RESOLVED = "resolved"
+    REJECTED = "rejected"
+
+
 class ItemSelection(BaseModel):
     item_id: str
     quantity: int = Field(ge=1)
@@ -74,16 +93,21 @@ class RefundCreateRequest(BaseModel):
     simulation_scenario_id: str = "default"
 
 class ManualReviewHandoff(BaseModel):
-    escalation_status: str
+    escalation_status: ManualReviewEscalationStatus
     queue_name: str
     sla_deadline_at: datetime
     payload: dict[str, str | int | float | bool]
+    claimed_by_admin_user_id: int | None = None
+    claimed_at: datetime | None = None
+    decided_by_admin_user_id: int | None = None
+    decided_at: datetime | None = None
+    reviewer_note: str | None = None
 
 
 class ManualReviewQueueItem(BaseModel):
     refund_request_id: str
     order_id: str
-    status: str
+    status: RefundRequestStatus
     created_at: datetime
     handoff: ManualReviewHandoff
 
@@ -94,14 +118,14 @@ class ManualReviewQueueResponse(BaseModel):
 
 
 class ManualReviewDecisionRequest(BaseModel):
-    decision: str = Field(pattern="^(resolved|rejected)$")
+    decision: ManualReviewDecision
     reviewer_note: str | None = None
 
 
 class RefundRequestResponse(BaseModel):
     refund_request_id: str
     order_id: str
-    status: str
+    status: RefundRequestStatus
     status_reason: str | None
     manual_review_handoff: ManualReviewHandoff | None = None
     created_at: datetime

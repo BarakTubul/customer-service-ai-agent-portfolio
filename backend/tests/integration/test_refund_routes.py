@@ -26,7 +26,7 @@ def test_refund_eligibility_and_create_request(client: TestClient, db_session: S
     assert owner is not None
 
     order_repo = OrderRepository(db_session)
-    order_repo.create(order_id="ord-ref-1", user_id=owner.id)
+    order_repo.create(order_id="ord-ref-1", user_id=owner.id, total_cents=2600)
 
     eligibility = client.post(
         "/api/v1/refunds/eligibility/check",
@@ -65,7 +65,7 @@ def test_refund_create_idempotent_replay_returns_200(client: TestClient, db_sess
     user_repo = UserRepository(db_session)
     owner = user_repo.get_by_email("refund-idem@example.com")
     assert owner is not None
-    OrderRepository(db_session).create(order_id="ord-ref-2", user_id=owner.id)
+    OrderRepository(db_session).create(order_id="ord-ref-2", user_id=owner.id, total_cents=3000)
 
     payload = {
         "order_id": "ord-ref-2",
@@ -94,7 +94,7 @@ def test_guest_refund_actions_forbidden(client: TestClient, db_session: Session)
     owner_token = _register_and_get_token(client, "owner-for-guest-test@example.com")
     owner = UserRepository(db_session).get_by_email("owner-for-guest-test@example.com")
     assert owner is not None
-    OrderRepository(db_session).create(order_id="ord-ref-3", user_id=owner.id)
+    OrderRepository(db_session).create(order_id="ord-ref-3", user_id=owner.id, total_cents=1800)
 
     guest_token = _guest_token(client)
     response = client.post(
@@ -120,7 +120,7 @@ def test_admin_manual_review_queue_and_decision_flow(client: TestClient, db_sess
     customer_token = _register_and_get_token(client, "refund-customer-admin-flow@example.com")
     customer = UserRepository(db_session).get_by_email("refund-customer-admin-flow@example.com")
     assert customer is not None
-    OrderRepository(db_session).create(order_id="ord-ref-admin-1", user_id=customer.id)
+    OrderRepository(db_session).create(order_id="ord-ref-admin-1", user_id=customer.id, total_cents=4200)
 
     created = client.post(
         "/api/v1/refunds/requests",
@@ -148,6 +148,8 @@ def test_admin_manual_review_queue_and_decision_flow(client: TestClient, db_sess
     claim = client.post(f"/api/v1/admin/refunds/requests/{request_id}/claim", headers=admin_headers)
     assert claim.status_code == 200
     assert claim.json()["manual_review_handoff"]["escalation_status"] == "in_review"
+    assert claim.json()["manual_review_handoff"]["claimed_by_admin_user_id"] is not None
+    assert claim.json()["manual_review_handoff"]["claimed_at"] is not None
 
     decision = client.post(
         f"/api/v1/admin/refunds/requests/{request_id}/decision",
@@ -157,7 +159,10 @@ def test_admin_manual_review_queue_and_decision_flow(client: TestClient, db_sess
     assert decision.status_code == 200
     assert decision.json()["status"] == "resolved"
     assert decision.json()["manual_review_handoff"]["escalation_status"] == "resolved"
-    assert "Approved after verification" in (decision.json()["status_reason"] or "")
+    assert decision.json()["status_reason"] == "manual_review_resolved"
+    assert decision.json()["manual_review_handoff"]["decided_by_admin_user_id"] is not None
+    assert decision.json()["manual_review_handoff"]["decided_at"] is not None
+    assert decision.json()["manual_review_handoff"]["reviewer_note"] == "Approved after verification"
 
 
 def test_admin_manual_review_requires_admin_role(client: TestClient) -> None:

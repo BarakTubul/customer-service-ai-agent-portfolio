@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -44,23 +45,26 @@ def test_eligibility_ineligible_for_expired_window() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-1", user_id=user.id)
+        order = order_repo.create(order_id="ord-r-1", user_id=user.id, total_cents=2500)
+        order.updated_at = datetime.now(UTC) - timedelta(hours=72)
+        session.add(order)
+        session.commit()
 
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session), refund_window_hours=24)
         response = service.check_eligibility(
             user=user,
             payload=RefundEligibilityCheckRequest(
                 order_id="ord-r-1",
                 reason_code=RefundReasonCode.LATE_DELIVERY,
-                simulation_scenario_id="expired-window",
+                simulation_scenario_id="delivered-happy",
             ),
         )
 
         assert response.eligible is False
         assert response.resolution_action == RefundResolutionAction.DENY
         assert RefundDecisionReasonCode.REFUND_WINDOW_EXPIRED in response.decision_reason_codes
-        assert response.explanation_template_key == "refund.scenario_hard_deny"
-        assert response.explanation_params["scenario_id"] == "expired-window"
+        assert response.explanation_template_key == "refund.refund_window_expired"
+        assert response.explanation_params["refund_window_hours"] == 24
         assert response.policy_version == RefundPolicyVersion.V1
     finally:
         session.close()
@@ -71,7 +75,7 @@ def test_eligibility_partial_for_missing_item() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-4", user_id=user.id)
+        order_repo.create(order_id="ord-r-4", user_id=user.id, total_cents=2400)
 
         service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
         response = service.check_eligibility(
@@ -88,7 +92,7 @@ def test_eligibility_partial_for_missing_item() -> None:
         assert response.decision_reason_codes == [RefundDecisionReasonCode.ELIGIBLE_PARTIAL]
         assert response.explanation_template_key == "refund.reason_policy_outcome"
         assert response.explanation_params["submitted_reason"] == RefundReasonCode.MISSING_ITEM
-        assert response.refundable_amount.value == 8.0
+        assert response.refundable_amount.value == 12.0
     finally:
         session.close()
 
@@ -98,7 +102,7 @@ def test_create_request_idempotent_replay() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-2", user_id=user.id)
+        order_repo.create(order_id="ord-r-2", user_id=user.id, total_cents=3000)
         service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
 
         payload = RefundCreateRequest(
@@ -120,7 +124,7 @@ def test_create_request_idempotent_replay() -> None:
         assert stored.resolution_action == RefundResolutionAction.APPROVE_PARTIAL
         assert stored.decision_reason_codes == RefundDecisionReasonCode.ELIGIBLE_PARTIAL
         assert stored.refundable_amount_currency == "USD"
-        assert stored.refundable_amount_value == 8.0
+        assert stored.refundable_amount_value == 15.0
         assert stored.explanation_template_key == "refund.reason_policy_outcome"
         explanation_params = json.loads(stored.explanation_params_json or "{}")
         assert explanation_params["submitted_reason"] == RefundReasonCode.MISSING_ITEM
@@ -135,7 +139,7 @@ def test_guest_cannot_submit_refund() -> None:
         guest = _create_user(session, is_guest=True)
         owner = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-3", user_id=owner.id)
+        order_repo.create(order_id="ord-r-3", user_id=owner.id, total_cents=2000)
         service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
 
         try:
@@ -159,7 +163,7 @@ def test_create_request_manual_review_emits_handoff_contract() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-5", user_id=user.id)
+        order_repo.create(order_id="ord-r-5", user_id=user.id, total_cents=2800)
         service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
 
         response = service.create_request(

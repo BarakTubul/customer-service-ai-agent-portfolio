@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     faq_relative_score_floor: float = 0.0
     faq_synthesis_history_messages: int = 6
     faq_synthesis_history_chars: int = 1200
+    refund_window_hours: int = 48
     mock_data_path: str = "backend/data/mock_data.json"
 
     @property

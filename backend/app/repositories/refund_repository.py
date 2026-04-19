@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -48,6 +48,11 @@ class RefundRepository:
         escalation_queue_name: str | None = None,
         escalation_sla_deadline_at: datetime | None = None,
         escalation_payload_json: str | None = None,
+        claimed_by_admin_user_id: int | None = None,
+        claimed_at: datetime | None = None,
+        decided_by_admin_user_id: int | None = None,
+        decided_at: datetime | None = None,
+        reviewer_note: str | None = None,
     ) -> RefundRequest:
         row = RefundRequest(
             refund_request_id=refund_request_id,
@@ -70,6 +75,11 @@ class RefundRepository:
             escalation_queue_name=escalation_queue_name,
             escalation_sla_deadline_at=escalation_sla_deadline_at,
             escalation_payload_json=escalation_payload_json,
+            claimed_by_admin_user_id=claimed_by_admin_user_id,
+            claimed_at=claimed_at,
+            decided_by_admin_user_id=decided_by_admin_user_id,
+            decided_at=decided_at,
+            reviewer_note=reviewer_note,
         )
         self.db.add(row)
         self.db.commit()
@@ -96,6 +106,7 @@ class RefundRepository:
         *,
         refund_request_id: str,
         to_status: str,
+        actor_admin_user_id: int,
         reviewer_note: str | None = None,
     ) -> RefundRequest | None:
         if to_status not in {"in_review", "resolved", "rejected"}:
@@ -110,17 +121,25 @@ class RefundRepository:
             return None
 
         row.escalation_status = to_status
+        now = datetime.now(UTC)
         if to_status == "resolved":
             row.status = "resolved"
             row.status_reason = "manual_review_resolved"
+            row.decided_by_admin_user_id = actor_admin_user_id
+            row.decided_at = now
         if to_status == "rejected":
             row.status = "denied"
             row.status_reason = "manual_review_rejected"
+            row.decided_by_admin_user_id = actor_admin_user_id
+            row.decided_at = now
+        if to_status == "in_review":
+            row.claimed_by_admin_user_id = actor_admin_user_id
+            row.claimed_at = now
 
         if reviewer_note:
             suffix = reviewer_note.strip()
             if suffix:
-                row.status_reason = f"{row.status_reason}:{suffix}" if row.status_reason else suffix
+                row.reviewer_note = suffix
 
         self.db.add(row)
         self.db.commit()

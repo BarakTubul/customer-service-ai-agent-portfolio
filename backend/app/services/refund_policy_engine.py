@@ -22,7 +22,7 @@ class RefundPolicyDecision:
     eligible: bool
     resolution_action: RefundResolutionAction
     decision_reason_codes: list[RefundDecisionReasonCode]
-    refundable_amount_value: float
+    refundable_ratio: float
     explanation_template_key: str
     explanation_params: dict[str, str | int | float | bool]
     policy_version: RefundPolicyVersion = POLICY_VERSION
@@ -37,6 +37,8 @@ class RefundPolicyEngine:
         simulation_scenario_id: str,
         fulfillment_state: str,
         payment_state: str,
+        refund_window_hours: int,
+        order_age_hours: float,
     ) -> RefundPolicyDecision:
         normalized_reason = reason_code.strip().lower()
 
@@ -45,7 +47,7 @@ class RefundPolicyEngine:
                 eligible=False,
                 resolution_action=RefundResolutionAction.DENY,
                 decision_reason_codes=[RefundDecisionReasonCode.PAYMENT_NOT_CAPTURED],
-                refundable_amount_value=0.0,
+                refundable_ratio=0.0,
                 explanation_template_key="refund.payment_not_captured",
                 explanation_params={"payment_state": payment_state},
             )
@@ -55,7 +57,7 @@ class RefundPolicyEngine:
                 eligible=False,
                 resolution_action=RefundResolutionAction.DENY,
                 decision_reason_codes=[SCENARIO_HARD_DENIAL_REASONS[simulation_scenario_id]],
-                refundable_amount_value=0.0,
+                refundable_ratio=0.0,
                 explanation_template_key="refund.scenario_hard_deny",
                 explanation_params={
                     "scenario_id": simulation_scenario_id,
@@ -68,7 +70,7 @@ class RefundPolicyEngine:
                 eligible=False,
                 resolution_action=RefundResolutionAction.MANUAL_REVIEW,
                 decision_reason_codes=[REASON_HARD_DENIAL_REASONS[normalized_reason]],
-                refundable_amount_value=0.0,
+                refundable_ratio=0.0,
                 explanation_template_key="refund.manual_review_required",
                 explanation_params={
                     "submitted_reason": normalized_reason,
@@ -81,9 +83,22 @@ class RefundPolicyEngine:
                 eligible=False,
                 resolution_action=RefundResolutionAction.DENY,
                 decision_reason_codes=[RefundDecisionReasonCode.FULFILLMENT_NOT_COMPLETED],
-                refundable_amount_value=0.0,
+                refundable_ratio=0.0,
                 explanation_template_key="refund.fulfillment_not_completed",
                 explanation_params={"fulfillment_state": fulfillment_state},
+            )
+
+        if order_age_hours > float(refund_window_hours):
+            return RefundPolicyDecision(
+                eligible=False,
+                resolution_action=RefundResolutionAction.DENY,
+                decision_reason_codes=[RefundDecisionReasonCode.REFUND_WINDOW_EXPIRED],
+                refundable_ratio=0.0,
+                explanation_template_key="refund.refund_window_expired",
+                explanation_params={
+                    "order_age_hours": round(order_age_hours, 2),
+                    "refund_window_hours": refund_window_hours,
+                },
             )
 
         matched_policy = REASON_POLICIES.get(normalized_reason, DEFAULT_UNSUPPORTED_REASON_POLICY)
@@ -91,14 +106,14 @@ class RefundPolicyEngine:
             eligible=matched_policy.eligible,
             resolution_action=matched_policy.resolution_action,
             decision_reason_codes=[matched_policy.reason_code],
-            refundable_amount_value=matched_policy.refundable_amount_value,
+            refundable_ratio=matched_policy.refundable_ratio,
             explanation_template_key="refund.reason_policy_outcome",
             explanation_params={
                 "submitted_reason": normalized_reason,
                 "decision_reason_code": matched_policy.reason_code,
                 "eligible": matched_policy.eligible,
                 "resolution_action": matched_policy.resolution_action,
-                "refundable_amount": matched_policy.refundable_amount_value,
+                "refund_ratio": matched_policy.refundable_ratio,
                 "currency": "USD",
             },
         )
