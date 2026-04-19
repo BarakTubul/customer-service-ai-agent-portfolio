@@ -28,7 +28,9 @@ export interface AuthTokenResponse {
 
 export interface LiveNotification {
   notification_id: string;
-  order_id: string;
+  kind?: 'order' | 'refund' | 'support';
+  order_id?: string | null;
+  target_path?: string | null;
   status: string;
   title: string;
   message: string;
@@ -103,6 +105,56 @@ export interface FAQSearchResponse {
   };
   citations: FAQCitation[];
   retrieval_mode: string;
+}
+
+export interface SupportConversationCreateRequest {
+  source_session_id?: string | null;
+  escalation_reason_code?: string | null;
+  escalation_reference_id?: string | null;
+  priority?: 'normal' | 'high';
+}
+
+export interface SupportConversationResponse {
+  conversation_id: string;
+  customer_user_id: number;
+  customer_email?: string | null;
+  status: string;
+  priority: string;
+  assigned_admin_user_id: number | null;
+  source_session_id: string | null;
+  escalation_reason_code: string | null;
+  escalation_reference_id: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  last_message_at?: string | null;
+  last_message_preview?: string | null;
+  unread_message_count?: number;
+}
+
+export interface SupportConversationListResponse {
+  items: SupportConversationResponse[];
+  total: number;
+}
+
+export interface SupportMessageCreateRequest {
+  body: string;
+}
+
+export interface SupportMessageResponse {
+  message_id: string;
+  conversation_id: string;
+  sender_user_id: number;
+  sender_role: string;
+  body: string;
+  created_at: string;
+  delivered_at: string | null;
+  read_at: string | null;
+}
+
+export interface SupportMessageListResponse {
+  items: SupportMessageResponse[];
+  total: number;
 }
 
 export interface RefundEligibilityResponse {

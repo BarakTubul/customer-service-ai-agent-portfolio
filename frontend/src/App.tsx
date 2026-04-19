@@ -14,6 +14,7 @@ import { OrderTimelinePage } from '@/pages/OrderTimelinePage';
 import { OrderPlacementPage } from '@/pages/OrderPlacementPage';
 import { RefundPage } from '@/pages/RefundPage';
 import { AdminRefundReviewPage } from '@/pages/AdminRefundReviewPage';
+import { AdminSupportInboxPage } from '@/pages/AdminSupportInboxPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -92,13 +93,31 @@ function AppRoutes() {
           }
         />
         <Route
-          path="/admin/refunds"
+          path="/support"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/refunds"
           element={
             <AdminRoute>
               <AdminRefundReviewPage />
             </AdminRoute>
           }
         />
+        <Route
+          path="/manager/support"
+          element={
+            <AdminRoute>
+              <AdminSupportInboxPage />
+            </AdminRoute>
+          }
+        />
+        <Route path="/admin/refunds" element={<Navigate to="/manager/refunds" replace />} />
+        <Route path="/admin/support" element={<Navigate to="/manager/support" replace />} />
       </Routes>
     </>
   );

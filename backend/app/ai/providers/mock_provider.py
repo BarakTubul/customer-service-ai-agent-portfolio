@@ -6,7 +6,12 @@ from app.ai.providers.base import IntentClassification
 class MockLLMProvider:
     """Deterministic provider used for tests and local fallback."""
 
-    def classify_intent(self, *, message_text: str) -> IntentClassification:
+    def classify_intent(
+        self,
+        *,
+        message_text: str,
+        conversation_context: str | None = None,
+    ) -> IntentClassification:
         normalized = message_text.lower()
         if "refund" in normalized:
             return IntentClassification(intent="refund_policy", confidence=0.88, reason="mock_refund_keyword")

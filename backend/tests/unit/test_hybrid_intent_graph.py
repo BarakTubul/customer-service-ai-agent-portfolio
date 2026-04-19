@@ -8,7 +8,12 @@ class FakeLLMProvider:
     def __init__(self) -> None:
         self.calls = 0
 
-    def classify_intent(self, *, message_text: str) -> IntentClassification:
+    def classify_intent(
+        self,
+        *,
+        message_text: str,
+        conversation_context: str | None = None,
+    ) -> IntentClassification:
         self.calls += 1
         return IntentClassification(intent="general_support", confidence=0.77, reason="fake_llm")
 
@@ -58,11 +63,48 @@ def test_refund_rule_path_skips_llm() -> None:
     assert provider.calls == 0
 
 
+def test_human_escalation_rule_path_skips_llm() -> None:
+    provider = FakeLLMProvider()
+    graph = HybridIntentGraph(llm_provider=provider, rule_confidence_threshold=0.75)
+
+    result = graph.run(message_text="Can I talk to a human agent?")
+
+    assert result["intent"] == "general_support"
+    assert result["used_llm"] is False
+    assert result["reason"] == "rule_human_escalation_request"
+    assert provider.calls == 0
+
+
+def test_human_assistance_rule_path_skips_llm() -> None:
+    provider = FakeLLMProvider()
+    graph = HybridIntentGraph(llm_provider=provider, rule_confidence_threshold=0.75)
+
+    result = graph.run(message_text="Can I ask for human assistance?")
+
+    assert result["intent"] == "general_support"
+    assert result["used_llm"] is False
+    assert result["reason"] == "rule_human_escalation_request"
+    assert provider.calls == 0
+
+
 def test_high_threshold_forces_llm_even_for_rule_match() -> None:
     provider = FakeLLMProvider()
     graph = HybridIntentGraph(llm_provider=provider, rule_confidence_threshold=0.95)
 
     result = graph.run(message_text="Where is my order now?")
+
+    assert result["used_llm"] is True
+    assert provider.calls == 1
+
+
+def test_contextual_followup_forces_llm() -> None:
+    provider = FakeLLMProvider()
+    graph = HybridIntentGraph(llm_provider=provider, rule_confidence_threshold=0.75)
+
+    result = graph.run(
+        message_text="yes, do it",
+        conversation_context="Assistant: Do you want help with refund policy or requesting a refund?",
+    )
 
     assert result["used_llm"] is True
     assert provider.calls == 1

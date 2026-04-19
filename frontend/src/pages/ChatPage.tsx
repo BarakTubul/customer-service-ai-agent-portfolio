@@ -10,9 +10,14 @@ interface Message {
   citations?: t.FAQCitation[];
 }
 
+const WELCOME_MESSAGE =
+  'Welcome! You can ask any question about the site, including orders, refunds, or account issues. You can also ask for human assistance at any time.';
+
 export function ChatPage() {
   const { sessionId } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'assistant', content: WELCOME_MESSAGE, citations: [] },
+  ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -73,41 +78,33 @@ export function ChatPage() {
     <div className="max-w-4xl mx-auto p-6 h-screen flex flex-col">
       <Card className="flex-1 overflow-y-auto mb-4">
         <div className="space-y-4">
-          {messages.length === 0 ? (
-            <div className="text-center text-gray-500 py-12">
-              <p className="text-lg">Start a conversation</p>
-              <p className="text-sm">Ask about orders, refunds, account issues, or anything else</p>
-            </div>
-          ) : (
-            messages.map((msg, idx) => (
+          {messages.map((msg, idx) => (
+            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
-                key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-xs lg:max-w-md p-4 rounded-lg ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white'
+                className={`max-w-xs lg:max-w-md p-4 rounded-lg ${
+                  msg.role === 'user'
+                    ? 'bg-blue-600 text-white'
+                    : idx === 0
+                      ? 'bg-blue-50 text-gray-900 border border-blue-100'
                       : 'bg-gray-100 text-gray-900 border border-gray-200'
-                  }`}
-                >
-                  <p className="text-sm">{msg.content}</p>
-                  {msg.citations && msg.citations.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-300 space-y-2">
-                      <p className="text-xs font-semibold opacity-75">Sources:</p>
-                      {msg.citations.map((cite, cidx) => (
-                        <div key={cidx} className="text-xs opacity-75">
-                          <p className="font-semibold">{cite.source_id}</p>
-                          <p className="italic">"{cite.snippet}"</p>
-                          <p className="text-xs">Score: {(cite.score * 100).toFixed(0)}%</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                }`}
+              >
+                <p className="text-sm">{msg.content}</p>
+                {msg.citations && msg.citations.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-300 space-y-2">
+                    <p className="text-xs font-semibold opacity-75">Sources:</p>
+                    {msg.citations.map((cite, cidx) => (
+                      <div key={cidx} className="text-xs opacity-75">
+                        <p className="font-semibold">{cite.source_id}</p>
+                        <p className="italic">"{cite.snippet}"</p>
+                        <p className="text-xs">Score: {(cite.score * 100).toFixed(0)}%</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
       </Card>
 

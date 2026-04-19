@@ -7,7 +7,9 @@ from pydantic import BaseModel
 
 class NotificationResponse(BaseModel):
     notification_id: str
-    order_id: str
+    kind: str = "order"
+    order_id: str | None = None
+    target_path: str | None = None
     status: str
     title: str
     message: str

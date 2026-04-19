@@ -9,6 +9,8 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories.order_repository import OrderRepository
+from app.repositories.refund_repository import RefundRepository
+from app.repositories.support_repository import SupportRepository
 from app.repositories.user_repository import UserRepository
 from app.services.account_order_service import AccountOrderService
 from app.schemas.notification import NotificationResponse
@@ -51,7 +53,9 @@ async def stream_live_notifications(websocket: WebSocket) -> None:
             return
 
         notification_service = NotificationService(
-            AccountOrderService(OrderRepository(db), UserRepository(db))
+            account_order_service=AccountOrderService(OrderRepository(db), UserRepository(db)),
+            refund_repository=RefundRepository(db),
+            support_repository=SupportRepository(db),
         )
         await websocket.accept()
 

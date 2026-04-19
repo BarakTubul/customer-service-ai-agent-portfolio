@@ -6,6 +6,7 @@ from app.api.routes.intent_faq import router as intent_faq_router
 from app.api.routes.order_placement import router as order_placement_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.routes.refunds import router as refunds_router
+from app.api.routes.support import router as support_router
 
 router = APIRouter()
 router.include_router(auth_router, tags=["auth"])
@@ -14,3 +15,4 @@ router.include_router(intent_faq_router, tags=["intent-faq"])
 router.include_router(order_placement_router, tags=["order-placement"])
 router.include_router(notifications_router, tags=["notifications"])
 router.include_router(refunds_router, tags=["refunds"])
+router.include_router(support_router, tags=["support"])

@@ -91,6 +91,56 @@ class IntentFAQService:
         link_label, link_path = link
         return f"Go to the [{link_label}]({link_path}) to do that."
 
+    @staticmethod
+    def _extract_order_id(text: str) -> str | None:
+        match = re.search(r"\b(ord_[a-z0-9]+)\b", text.strip().lower())
+        if not match:
+            return None
+        return match.group(1)
+
+    @staticmethod
+    def _is_human_escalation_request(query_text: str) -> bool:
+        normalized = query_text.strip().lower()
+        return bool(
+            re.search(
+                r"\b(human\s+help|human\s+support|human\s+assistance|human\s+agent|real\s+person|live\s+agent|talk\s+to\s+(a\s+)?person|speak\s+(to|with)\s+(a\s+)?human|need\s+assistance|assistance\s+now|manager|escalat(e|ion|ing)?)\b",
+                normalized,
+            )
+        )
+
+    @staticmethod
+    def _is_escalation_follow_up_confirmation(query_text: str) -> bool:
+        normalized = query_text.strip().lower()
+        if not normalized:
+            return False
+        if IntentFAQService._extract_order_id(normalized) is not None:
+            return False
+        return bool(
+            re.search(
+                r"\b(ok|okay|yes|yep|sure|please|need\s+one|i\s+need\s+one|do\s+it|go\s+ahead|i\s+want\s+one)\b",
+                normalized,
+            )
+        )
+
+    def _has_pending_handoff_prompt(self, *, session_id: str) -> bool:
+        recent = self.conversation_repository.list_recent_messages(session_id=session_id, limit=4)
+        if not recent:
+            return False
+        for message in reversed(recent):
+            if message.role != "assistant":
+                continue
+            text = message.text.strip().lower()
+            if "support chat" in text and "/support" in text:
+                return True
+            return False
+        return False
+
+    @staticmethod
+    def _build_human_handoff_reply() -> str:
+        return (
+            "For human support, please open a regular support chat at /support so an admin can assist you directly."
+        )
+
     def _select_retrieved_chunks(self, retrieved: list[tuple[FAQChunk, float]]) -> list[tuple[FAQChunk, float]]:
         if not retrieved:
             return []
@@ -161,7 +211,47 @@ class IntentFAQService:
         return "\n".join(sections)
 
     def resolve_intent(self, *, user: User, session_id: str, message_text: str, message_id: str) -> IntentResolveResponse:
-        state = self.intent_graph.run(message_text=message_text)
+        if self._is_human_escalation_request(message_text):
+            trace_id = hashlib.sha256(f"{session_id}:{message_id}:general_support".encode("utf-8")).hexdigest()[:16]
+            self.conversation_repository.add_message(
+                session_id=session_id,
+                user_id=user.id,
+                role="user",
+                text=message_text,
+            )
+            return IntentResolveResponse(
+                intent="general_support",
+                confidence=0.99,
+                requires_clarification=True,
+                clarification_question=self._build_human_handoff_reply(),
+                route="clarify",
+                trace_id=trace_id,
+            )
+
+        if self._has_pending_handoff_prompt(session_id=session_id) and self._is_escalation_follow_up_confirmation(
+            message_text
+        ):
+            trace_id = hashlib.sha256(f"{session_id}:{message_id}:general_support".encode("utf-8")).hexdigest()[:16]
+            self.conversation_repository.add_message(
+                session_id=session_id,
+                user_id=user.id,
+                role="user",
+                text=message_text,
+            )
+            return IntentResolveResponse(
+                intent="general_support",
+                confidence=0.99,
+                requires_clarification=True,
+                clarification_question=self._build_human_handoff_reply(),
+                route="clarify",
+                trace_id=trace_id,
+            )
+
+        conversation_context = self._build_conversation_context(session_id=session_id)
+        state = self.intent_graph.run(
+            message_text=message_text,
+            conversation_context=conversation_context,
+        )
         intent = state["intent"]
         confidence = state["confidence"]
         reason = state.get("reason", "")
@@ -182,6 +272,23 @@ class IntentFAQService:
                     "Hi! I can help with refunds, order status, and account verification. "
                     "What do you need help with?"
                 ),
+                route="clarify",
+                trace_id=trace_id,
+            )
+
+        if reason == "rule_human_escalation_request":
+            trace_id = hashlib.sha256(f"{session_id}:{message_id}:{intent}".encode("utf-8")).hexdigest()[:16]
+            self.conversation_repository.add_message(
+                session_id=session_id,
+                user_id=user.id,
+                role="user",
+                text=message_text,
+            )
+            return IntentResolveResponse(
+                intent="general_support",
+                confidence=confidence,
+                requires_clarification=True,
+                clarification_question=self._build_human_handoff_reply(),
                 route="clarify",
                 trace_id=trace_id,
             )
@@ -214,6 +321,25 @@ class IntentFAQService:
         )
 
     def search_faq(self, *, user: User, session_id: str, query_text: str, intent: str) -> FAQSearchResponse:
+        if self._is_human_escalation_request(query_text) or (
+            self._has_pending_handoff_prompt(session_id=session_id)
+            and self._is_escalation_follow_up_confirmation(query_text)
+        ):
+            answer = FAQAnswer(
+                text=self._build_human_handoff_reply(),
+                confidence=0.95,
+                source_label="Support Escalation",
+                source_id="support-escalation",
+                policy_version="n/a",
+            )
+            self.conversation_repository.add_message(
+                session_id=session_id,
+                user_id=user.id,
+                role="assistant",
+                text=answer.text,
+            )
+            return FAQSearchResponse(answer=answer, citations=[], retrieval_mode="handoff_ack")
+
         retrieved = self.faq_repository.retrieve_chunks(
             intent=intent,
             query_text=query_text,

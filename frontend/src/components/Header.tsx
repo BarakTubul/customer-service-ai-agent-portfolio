@@ -16,7 +16,10 @@ export function Header() {
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
   const navItems = user?.is_admin
-    ? [{ label: 'Refund Reviews', path: '/admin/refunds' }]
+    ? [
+        { label: 'Manager Reviews', path: '/manager/refunds' },
+        { label: 'Support Inbox', path: '/manager/support' },
+      ]
     : [
         { label: 'My Orders', path: '/orders' },
         { label: 'Order', path: '/order' },
@@ -152,7 +155,7 @@ export function Header() {
                             type="button"
                             className="w-full text-left rounded-lg border border-gray-100 p-3 hover:bg-gray-50 transition"
                             onClick={() => {
-                              navigate(`/orders/${notification.order_id}/timeline`);
+                              navigate(notification.target_path || `/orders/${notification.order_id}/timeline`);
                               setShowNotifications(false);
                             }}
                           >

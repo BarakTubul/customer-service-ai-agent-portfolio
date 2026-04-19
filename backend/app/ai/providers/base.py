@@ -12,7 +12,12 @@ class IntentClassification:
 
 
 class LLMProvider(Protocol):
-    def classify_intent(self, *, message_text: str) -> IntentClassification:
+    def classify_intent(
+        self,
+        *,
+        message_text: str,
+        conversation_context: str | None = None,
+    ) -> IntentClassification:
         ...
 
     def synthesize_faq_answer(

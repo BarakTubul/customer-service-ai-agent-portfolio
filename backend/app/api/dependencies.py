@@ -20,6 +20,7 @@ from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.faq_repository import FAQRepository
 from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
+from app.repositories.support_repository import SupportRepository
 from app.repositories.user_repository import UserRepository
 from app.services.account_order_service import AccountOrderService
 from app.services.auth_service import AuthService
@@ -27,6 +28,7 @@ from app.services.intent_faq_service import IntentFAQService
 from app.services.order_placement_service import OrderPlacementService
 from app.services.notification_service import NotificationService
 from app.services.refund_service import RefundService
+from app.services.support_chat_service import SupportChatService
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -55,15 +57,24 @@ def get_order_placement_service(
 ) -> OrderPlacementService:
     return OrderPlacementService(order_repository)
 
+def get_refund_repository(db: Session = Depends(get_db)) -> RefundRepository:
+    return RefundRepository(db)
+
+
+def get_support_repository(db: Session = Depends(get_db)) -> SupportRepository:
+    return SupportRepository(db)
+
 
 def get_notification_service(
     account_order_service: AccountOrderService = Depends(get_account_order_service),
+    refund_repository: RefundRepository = Depends(get_refund_repository),
+    support_repository: SupportRepository = Depends(get_support_repository),
 ) -> NotificationService:
-    return NotificationService(account_order_service)
-
-
-def get_refund_repository(db: Session = Depends(get_db)) -> RefundRepository:
-    return RefundRepository(db)
+    return NotificationService(
+        account_order_service=account_order_service,
+        refund_repository=refund_repository,
+        support_repository=support_repository,
+    )
 
 
 def get_refund_service(
@@ -71,6 +82,12 @@ def get_refund_service(
     refund_repository: RefundRepository = Depends(get_refund_repository),
 ) -> RefundService:
     return RefundService(order_repository=order_repository, refund_repository=refund_repository)
+
+
+def get_support_chat_service(
+    support_repository: SupportRepository = Depends(get_support_repository),
+) -> SupportChatService:
+    return SupportChatService(support_repository=support_repository)
 
 
 def get_faq_repository() -> FAQRepository:
