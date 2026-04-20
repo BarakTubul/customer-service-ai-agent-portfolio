@@ -11,6 +11,7 @@ from app.core.errors import ConflictError
 from app.models.user import User
 from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
+from app.services.account_order_service import AccountOrderService
 from app.services.refund_policy_engine import RefundPolicyEngine
 from app.schemas.refund import (
     ManualReviewDecision,
@@ -47,31 +48,24 @@ class RefundService:
         self,
         order_repository: OrderRepository,
         refund_repository: RefundRepository,
+        account_order_service: AccountOrderService,
         refund_window_hours: int = 48,
     ) -> None:
         self.order_repository = order_repository
         self.refund_repository = refund_repository
+        self.account_order_service = account_order_service
         self.policy_engine = RefundPolicyEngine()
         self.refund_window_hours = max(1, refund_window_hours)
 
     def check_eligibility(self, *, user: User, payload: RefundEligibilityCheckRequest) -> RefundEligibilityCheckResponse:
         order = self._get_owned_order(user=user, order_id=payload.order_id)
-        scenario_id = self._select_simulation_scenario(
-            order_id=order.order_id,
-            reason_code=payload.reason_code,
-            forced_scenario_id=payload.simulation_scenario_id,
-        )
-        simulated_state = self._simulate_order_state(
-            order=order,
-            reason_code=payload.reason_code,
-            scenario_id=scenario_id,
-        )
+        order_state = self._build_order_state_snapshot(user=user, order=order)
 
         decision = self.policy_engine.evaluate(
             reason_code=payload.reason_code,
-            simulation_scenario_id=scenario_id,
-            fulfillment_state=simulated_state["fulfillment_state"],
-            payment_state=simulated_state["payment_state"],
+            simulation_scenario_id=order_state["fulfillment_state"],
+            fulfillment_state=order_state["fulfillment_state"],
+            payment_state=order_state["payment_state"],
             refund_window_hours=self.refund_window_hours,
             order_age_hours=self._calculate_order_age_hours(order),
         )
@@ -89,7 +83,7 @@ class RefundService:
             policy_version=decision.policy_version,
             policy_reference=decision.policy_reference,
             refundable_amount=MoneyAmount(currency="USD", value=refundable_amount_value),
-            simulated_state=simulated_state["fulfillment_state"],
+            simulated_state=order_state["fulfillment_state"],
         )
 
     def create_request(
@@ -118,21 +112,12 @@ class RefundService:
                 idempotent_replay=True,
             )
 
-        scenario_id = self._select_simulation_scenario(
-            order_id=order.order_id,
-            reason_code=payload.reason_code,
-            forced_scenario_id=payload.simulation_scenario_id,
-        )
-        simulated_state = self._simulate_order_state(
-            order=order,
-            reason_code=payload.reason_code,
-            scenario_id=scenario_id,
-        )
+        order_state = self._build_order_state_snapshot(user=user, order=order)
         decision = self.policy_engine.evaluate(
             reason_code=payload.reason_code,
-            simulation_scenario_id=scenario_id,
-            fulfillment_state=simulated_state["fulfillment_state"],
-            payment_state=simulated_state["payment_state"],
+            simulation_scenario_id=order_state["fulfillment_state"],
+            fulfillment_state=order_state["fulfillment_state"],
+            payment_state=order_state["payment_state"],
             refund_window_hours=self.refund_window_hours,
             order_age_hours=self._calculate_order_age_hours(order),
         )
@@ -153,13 +138,13 @@ class RefundService:
             policy_version=decision.policy_version,
             policy_reference=decision.policy_reference,
             refundable_amount=MoneyAmount(currency="USD", value=refundable_amount_value),
-            simulated_state=simulated_state["fulfillment_state"],
+            simulated_state=order_state["fulfillment_state"],
         )
         manual_review_handoff = self._build_manual_review_handoff(
             user_id=user.id,
             order_id=order.order_id,
             reason_code=payload.reason_code,
-            simulation_scenario_id=scenario_id,
+            simulation_scenario_id=str(order_state["fulfillment_state"]),
             eligibility=eligibility,
         )
 
@@ -178,7 +163,7 @@ class RefundService:
             user_id=user.id,
             order_id=order.order_id,
             reason_code=payload.reason_code,
-            simulation_scenario_id=scenario_id,
+            simulation_scenario_id=str(order_state["fulfillment_state"]),
             status=status,
             status_reason=status_reason,
             policy_version=eligibility.policy_version,
@@ -275,34 +260,21 @@ class RefundService:
         reason_code: str | None = None,
     ) -> OrderStateSimResponse:
         order = self._get_owned_order(user=user, order_id=order_id)
-        selected_reason = reason_code or "other"
-        selected_scenario = self._select_simulation_scenario(
-            order_id=order.order_id,
-            reason_code=selected_reason,
-            forced_scenario_id=scenario_id,
-        )
-        simulated = self._simulate_order_state(
-            order=order,
-            reason_code=selected_reason,
-            scenario_id=selected_scenario,
-        )
-
-        now = order.updated_at.astimezone(UTC)
+        order_state = self._build_order_state_snapshot(user=user, order=order)
         timeline = [
-            {"state": "accepted", "timestamp": (now - timedelta(minutes=30)).isoformat()},
-            {"state": "preparing", "timestamp": (now - timedelta(minutes=20)).isoformat()},
-            {"state": simulated["fulfillment_state"], "timestamp": now.isoformat()},
+            {"state": event["state"], "timestamp": event["timestamp"]}
+            for event in order_state["state_timeline"]
         ]
         return OrderStateSimResponse(
             order_id=order.order_id,
-            simulation_scenario_id=str(simulated["scenario_id"]),
-            fulfillment_state=str(simulated["fulfillment_state"]),
-            payment_state=str(simulated["payment_state"]),
-            ordered_items_summary=simulated["ordered_items_summary"],
-            received_items_summary=simulated["received_items_summary"],
-            is_delayed=bool(simulated["is_delayed"]),
-            eta_to=simulated["eta_to"],
-            delivered_at=simulated["delivered_at"],
+            simulation_scenario_id=str(order_state["fulfillment_state"]),
+            fulfillment_state=str(order_state["fulfillment_state"]),
+            payment_state=str(order_state["payment_state"]),
+            ordered_items_summary=order_state["ordered_items_summary"],
+            received_items_summary=order_state["received_items_summary"],
+            is_delayed=bool(order_state["is_delayed"]),
+            eta_to=order_state["eta_to"],
+            delivered_at=order_state["delivered_at"],
             state_timeline=timeline,
         )
 
@@ -315,6 +287,31 @@ class RefundService:
         if order.user_id != user.id:
             raise ForbiddenError("Order does not belong to current user")
         return order
+
+    def _build_order_state_snapshot(self, *, user: User, order):
+        timeline = self.account_order_service.get_order_timeline_sim(
+            user=user,
+            order_id=order.order_id,
+            scenario_id=None,
+        )
+        current_status = timeline.events[-1].event if timeline.events else "unknown"
+        delivered = current_status == "delivered"
+        delivered_at = timeline.events[-1].timestamp if delivered and timeline.events else None
+        received_items_summary = timeline.received_items_summary if delivered else None
+
+        return {
+            "fulfillment_state": current_status,
+            "payment_state": "captured",
+            "ordered_items_summary": order.ordered_items_summary,
+            "received_items_summary": received_items_summary,
+            "is_delayed": bool(timeline.is_delayed) if delivered else False,
+            "eta_to": timeline.eta_to,
+            "delivered_at": delivered_at,
+            "state_timeline": [
+                {"state": event.event, "timestamp": event.timestamp.isoformat()}
+                for event in timeline.events
+            ],
+        }
 
     @staticmethod
     def _build_idempotency_key(*, user_id: int, order_id: str, reason_code: str) -> str:

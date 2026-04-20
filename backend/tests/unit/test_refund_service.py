@@ -11,6 +11,8 @@ from app.db.base import Base
 from app.models.user import User
 from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
+from app.repositories.user_repository import UserRepository
+from app.services.account_order_service import AccountOrderService
 from app.services.refund_service import RefundService
 from app.schemas.refund import (
     RefundCreateRequest,
@@ -40,6 +42,15 @@ def _create_user(session: Session, *, is_guest: bool = False) -> User:
     return user
 
 
+def _create_delivered_order(order_repo: OrderRepository, *, order_id: str, user_id: int, total_cents: int) -> None:
+    order = order_repo.create(order_id=order_id, user_id=user_id, total_cents=total_cents)
+    order.created_at = datetime.now(UTC) - timedelta(hours=2)
+    order.updated_at = order.created_at
+    order_repo.db.add(order)
+    order_repo.db.commit()
+    order_repo.db.refresh(order)
+
+
 def test_eligibility_ineligible_for_expired_window() -> None:
     session = build_session()
     try:
@@ -47,10 +58,16 @@ def test_eligibility_ineligible_for_expired_window() -> None:
         order_repo = OrderRepository(session)
         order = order_repo.create(order_id="ord-r-1", user_id=user.id, total_cents=2500)
         order.updated_at = datetime.now(UTC) - timedelta(hours=72)
+        order.created_at = order.updated_at
         session.add(order)
         session.commit()
 
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session), refund_window_hours=24)
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            account_order_service=AccountOrderService(order_repo, UserRepository(session)),
+            refund_window_hours=24,
+        )
         response = service.check_eligibility(
             user=user,
             payload=RefundEligibilityCheckRequest(
@@ -75,9 +92,13 @@ def test_eligibility_partial_for_missing_item() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-4", user_id=user.id, total_cents=2400)
+        _create_delivered_order(order_repo, order_id="ord-r-4", user_id=user.id, total_cents=2400)
 
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            account_order_service=AccountOrderService(order_repo, UserRepository(session)),
+        )
         response = service.check_eligibility(
             user=user,
             payload=RefundEligibilityCheckRequest(
@@ -102,8 +123,12 @@ def test_create_request_idempotent_replay() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-2", user_id=user.id, total_cents=3000)
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        _create_delivered_order(order_repo, order_id="ord-r-2", user_id=user.id, total_cents=3000)
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            account_order_service=AccountOrderService(order_repo, UserRepository(session)),
+        )
 
         payload = RefundCreateRequest(
             order_id="ord-r-2",
@@ -139,8 +164,12 @@ def test_guest_cannot_submit_refund() -> None:
         guest = _create_user(session, is_guest=True)
         owner = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-3", user_id=owner.id, total_cents=2000)
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        _create_delivered_order(order_repo, order_id="ord-r-3", user_id=owner.id, total_cents=2000)
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            account_order_service=AccountOrderService(order_repo, UserRepository(session)),
+        )
 
         try:
             service.check_eligibility(
@@ -163,8 +192,12 @@ def test_create_request_manual_review_emits_handoff_contract() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        order_repo.create(order_id="ord-r-5", user_id=user.id, total_cents=2800)
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        _create_delivered_order(order_repo, order_id="ord-r-5", user_id=user.id, total_cents=2800)
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            account_order_service=AccountOrderService(order_repo, UserRepository(session)),
+        )
 
         response = service.create_request(
             user=user,

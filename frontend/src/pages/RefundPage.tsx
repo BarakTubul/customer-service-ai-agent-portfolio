@@ -143,7 +143,7 @@ export function RefundPage() {
           </Card>
 
           <Card className="bg-blue-50">
-            <h3 className="font-bold text-gray-900 mb-3">Order State Simulation</h3>
+            <h3 className="font-bold text-gray-900 mb-3">Order State</h3>
             <div className="space-y-2 text-sm">
               <p><span className="font-semibold">Fulfillment:</span> {orderState.fulfillment_state}</p>
               <p><span className="font-semibold">Payment:</span> {orderState.payment_state}</p>

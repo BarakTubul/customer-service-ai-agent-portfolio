@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.repositories.order_repository import OrderRepository
@@ -19,6 +20,15 @@ def _guest_token(client: TestClient) -> str:
     return response.json()["access_token"]
 
 
+def _create_delivered_order(order_repo: OrderRepository, *, order_id: str, user_id: int, total_cents: int) -> None:
+    order = order_repo.create(order_id=order_id, user_id=user_id, total_cents=total_cents)
+    order.created_at = datetime.now(UTC) - timedelta(hours=2)
+    order.updated_at = order.created_at
+    order_repo.db.add(order)
+    order_repo.db.commit()
+    order_repo.db.refresh(order)
+
+
 def test_refund_eligibility_and_create_request(client: TestClient, db_session: Session) -> None:
     token = _register_and_get_token(client, "refund-owner@example.com")
     user_repo = UserRepository(db_session)
@@ -26,7 +36,7 @@ def test_refund_eligibility_and_create_request(client: TestClient, db_session: S
     assert owner is not None
 
     order_repo = OrderRepository(db_session)
-    order_repo.create(order_id="ord-ref-1", user_id=owner.id, total_cents=2600)
+    _create_delivered_order(order_repo, order_id="ord-ref-1", user_id=owner.id, total_cents=2600)
 
     eligibility = client.post(
         "/api/v1/refunds/eligibility/check",
@@ -65,7 +75,7 @@ def test_refund_create_idempotent_replay_returns_200(client: TestClient, db_sess
     user_repo = UserRepository(db_session)
     owner = user_repo.get_by_email("refund-idem@example.com")
     assert owner is not None
-    OrderRepository(db_session).create(order_id="ord-ref-2", user_id=owner.id, total_cents=3000)
+    _create_delivered_order(OrderRepository(db_session), order_id="ord-ref-2", user_id=owner.id, total_cents=3000)
 
     payload = {
         "order_id": "ord-ref-2",
@@ -94,7 +104,7 @@ def test_guest_refund_actions_forbidden(client: TestClient, db_session: Session)
     owner_token = _register_and_get_token(client, "owner-for-guest-test@example.com")
     owner = UserRepository(db_session).get_by_email("owner-for-guest-test@example.com")
     assert owner is not None
-    OrderRepository(db_session).create(order_id="ord-ref-3", user_id=owner.id, total_cents=1800)
+    _create_delivered_order(OrderRepository(db_session), order_id="ord-ref-3", user_id=owner.id, total_cents=1800)
 
     guest_token = _guest_token(client)
     response = client.post(
@@ -120,7 +130,7 @@ def test_admin_manual_review_queue_and_decision_flow(client: TestClient, db_sess
     customer_token = _register_and_get_token(client, "refund-customer-admin-flow@example.com")
     customer = UserRepository(db_session).get_by_email("refund-customer-admin-flow@example.com")
     assert customer is not None
-    OrderRepository(db_session).create(order_id="ord-ref-admin-1", user_id=customer.id, total_cents=4200)
+    _create_delivered_order(OrderRepository(db_session), order_id="ord-ref-admin-1", user_id=customer.id, total_cents=4200)
 
     created = client.post(
         "/api/v1/refunds/requests",

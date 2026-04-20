@@ -130,6 +130,10 @@ export function OrdersPage() {
   }, [isGuest, user?.email]);
 
   const openRefundDialog = (order: t.Order) => {
+    if (getOrderStatus(order) !== 'delivered') {
+      setRefundError('Refunds are available after delivery only.');
+      return;
+    }
     setRefundOrder(order);
     setRefundReason('');
     setRefundSimulation(null);
@@ -276,7 +280,13 @@ export function OrdersPage() {
                     </p>
                   </button>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => openRefundDialog(order)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openRefundDialog(order)}
+                      disabled={getOrderStatus(order) !== 'delivered'}
+                      title={getOrderStatus(order) !== 'delivered' ? 'Refunds are available after delivery' : undefined}
+                    >
                       Refund
                     </Button>
                     <Button size="sm" onClick={() => navigate(`/orders/${order.order_id}`)} variant="outline">
@@ -351,7 +361,7 @@ export function OrdersPage() {
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
                     <p className="font-semibold text-slate-900">Delivery evidence</p>
                     {refundSimulationLoading ? (
-                      <p>Checking delivery simulation...</p>
+                      <p>Checking delivery state...</p>
                     ) : refundSimulation ? (
                       <>
                         <p><span className="font-medium">Ordered:</span> {refundSimulation.ordered_items_summary || 'No summary available'}</p>
