@@ -256,13 +256,21 @@ class OrderPlacementService:
         seed = hashlib.sha256(f"{order_id}:{selected_scenario}".encode("utf-8")).hexdigest()
         offset = int(seed[:2], 16) % 8
         base = order.created_at.astimezone(UTC)
+        now = datetime.now(UTC)
+        elapsed_seconds = (now - base).total_seconds()
+        
         if selected_scenario == "late_delivery":
+            all_events = [
+                ("accepted", 30 + offset),
+                ("preparing", 60 + offset),
+                ("driver_assigned", 90 + offset),
+                ("arriving", 120 + offset),
+                ("delivered", 180 + offset),
+            ]
             events = [
-                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=2 + offset), event="accepted"),
-                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=10 + offset), event="preparing"),
-                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=24 + offset), event="driver_assigned"),
-                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=40 + offset), event="arriving"),
-                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=62 + offset), event="delivered"),
+                OrderLifecycleEventResponse(timestamp=base + timedelta(seconds=seconds), event=event_name)
+                for event_name, seconds in all_events
+                if seconds <= elapsed_seconds
             ]
             return OrderLifecycleSimResponse(
                 order_id=order_id,
@@ -286,12 +294,17 @@ class OrderPlacementService:
             issue_code = "quality_issue"
             received_summary = f"{order.ordered_items_summary or 'Order items'} (quality issue reported)"
 
+        all_events = [
+            ("accepted", 10 + offset),
+            ("preparing", 20 + offset),
+            ("driver_assigned", 30 + offset),
+            ("arriving", 50 + offset),
+            ("delivered", 60 + offset),
+        ]
         events = [
-            OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=2 + offset), event="accepted"),
-            OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=8 + offset), event="preparing"),
-            OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=18 + offset), event="driver_assigned"),
-            OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=30 + offset), event="arriving"),
-            OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=38 + offset), event="delivered"),
+            OrderLifecycleEventResponse(timestamp=base + timedelta(seconds=seconds), event=event_name)
+            for event_name, seconds in all_events
+            if seconds <= elapsed_seconds
         ]
         return OrderLifecycleSimResponse(
             order_id=order_id,

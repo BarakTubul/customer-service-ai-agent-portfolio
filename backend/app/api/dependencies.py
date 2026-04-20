@@ -81,12 +81,7 @@ def get_refund_service(
     order_repository: OrderRepository = Depends(get_order_repository),
     refund_repository: RefundRepository = Depends(get_refund_repository),
 ) -> RefundService:
-    settings = get_settings()
-    return RefundService(
-        order_repository=order_repository,
-        refund_repository=refund_repository,
-        refund_window_hours=settings.refund_window_hours,
-    )
+    return RefundService(order_repository=order_repository, refund_repository=refund_repository)
 
 
 def get_support_chat_service(

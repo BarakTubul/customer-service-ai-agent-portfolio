@@ -110,12 +110,12 @@ class AccountOrderService:
             return order.eta_from, order.eta_to
 
         now = datetime.now(UTC)
-        eta_from = order.created_at.astimezone(UTC) + timedelta(seconds=35)
-        eta_to = order.created_at.astimezone(UTC) + timedelta(seconds=50)
+        eta_from = order.created_at.astimezone(UTC) + timedelta(minutes=1)
+        eta_to = order.created_at.astimezone(UTC) + timedelta(minutes=2)
 
         if now > eta_to:
-            eta_from = now + timedelta(seconds=10)
-            eta_to = now + timedelta(seconds=20)
+            eta_from = now + timedelta(minutes=1)
+            eta_to = now + timedelta(minutes=2)
 
         return eta_from, eta_to
 
@@ -133,17 +133,16 @@ class AccountOrderService:
         base_time = order.created_at.astimezone(UTC)
         now = datetime.now(UTC)
         stage_definitions = self._build_timeline_stage_definitions(selected_scenario, offset)
-        latest_stage_seconds = stage_definitions[-1][1]
-        simulated_now = max(now, base_time + timedelta(seconds=latest_stage_seconds + 1))
+        elapsed_seconds = (now - base_time).total_seconds()
 
         events = [
             OrderTimelineEvent(event=event_name, timestamp=base_time + timedelta(seconds=seconds_after), source="sim")
             for event_name, seconds_after in stage_definitions
-            if base_time + timedelta(seconds=seconds_after) <= simulated_now
+            if seconds_after <= elapsed_seconds
         ]
 
         if not events:
-            events = [OrderTimelineEvent(event="accepted", timestamp=base_time + timedelta(seconds=2 + offset), source="sim")]
+            events = [OrderTimelineEvent(event="accepted", timestamp=base_time + timedelta(seconds=60 + offset), source="sim")]
 
         ordered_summary = order.ordered_items_summary
         received_summary = ordered_summary
@@ -182,21 +181,21 @@ class AccountOrderService:
     def _build_timeline_stage_definitions(scenario_id: str, offset: int) -> list[tuple[str, int]]:
         if scenario_id == "late_delivery":
             return [
-                ("accepted", 2 + offset),
-                ("preparing", 10 + offset),
-                ("pickup", 22 + offset),
-                ("in_transit", 34 + offset),
-                ("arriving", 52 + offset),
-                ("delivered", 70 + offset),
+                ("accepted", 30 + offset),
+                ("preparing", 60 + offset),
+                ("pickup", 90 + offset),
+                ("in_transit", 120 + offset),
+                ("arriving", 150 + offset),
+                ("delivered", 180 + offset),
             ]
 
         return [
-            ("accepted", 2 + offset),
-            ("preparing", 8 + offset),
-            ("pickup", 18 + offset),
-            ("in_transit", 30 + offset),
-            ("arriving", 40 + offset),
-            ("delivered", 45 + offset),
+            ("accepted", 10 + offset),
+            ("preparing", 20 + offset),
+            ("pickup", 30 + offset),
+            ("in_transit", 40 + offset),
+            ("arriving", 50 + offset),
+            ("delivered", 60 + offset),
         ]
 
     @staticmethod

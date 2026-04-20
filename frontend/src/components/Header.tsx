@@ -23,6 +23,7 @@ export function Header() {
     : [
         { label: 'My Orders', path: '/orders' },
         { label: 'Order', path: '/order' },
+        { label: 'Refunds', path: '/refund' },
       ];
 
   useEffect(() => {
