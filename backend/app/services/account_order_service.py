@@ -147,19 +147,26 @@ class AccountOrderService:
         ordered_summary = order.ordered_items_summary
         received_summary = ordered_summary
         issue_code: str | None = None
-        is_delayed = selected_scenario == "late_delivery"
+        is_delayed = False
+        
+        # Only reveal delivery outcome after order has been delivered
+        delivered_time = stage_definitions[-1][1]  # Last event is always "delivered"
+        is_order_delivered = elapsed_seconds >= delivered_time
 
-        if selected_scenario == "missing_item":
-            issue_code = "missing_item"
-            received_summary = f"{ordered_summary or 'Order items'} (one item missing)"
-        elif selected_scenario == "wrong_item":
-            issue_code = "wrong_item"
-            received_summary = f"{ordered_summary or 'Order items'} (included wrong item)"
-        elif selected_scenario == "quality_issue":
-            issue_code = "quality_issue"
-            received_summary = f"{ordered_summary or 'Order items'} (quality issue reported)"
-        elif selected_scenario == "late_delivery":
-            issue_code = "late_delivery"
+        if is_order_delivered:
+            is_delayed = selected_scenario == "late_delivery"
+            
+            if selected_scenario == "missing_item":
+                issue_code = "missing_item"
+                received_summary = f"{ordered_summary or 'Order items'} (one item missing)"
+            elif selected_scenario == "wrong_item":
+                issue_code = "wrong_item"
+                received_summary = f"{ordered_summary or 'Order items'} (included wrong item)"
+            elif selected_scenario == "quality_issue":
+                issue_code = "quality_issue"
+                received_summary = f"{ordered_summary or 'Order items'} (quality issue reported)"
+            elif selected_scenario == "late_delivery":
+                issue_code = "late_delivery"
 
         return OrderTimelineResponse(
             order_id=order.order_id,

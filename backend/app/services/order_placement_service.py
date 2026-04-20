@@ -272,11 +272,16 @@ class OrderPlacementService:
                 for event_name, seconds in all_events
                 if seconds <= elapsed_seconds
             ]
+            # Only reveal outcome after delivery
+            is_order_delivered = elapsed_seconds >= (180 + offset)
+            issue_code = "late_delivery" if is_order_delivered else None
+            is_delayed = is_order_delivered
+            
             return OrderLifecycleSimResponse(
                 order_id=order_id,
                 scenario_id=selected_scenario,
-                is_delayed=True,
-                issue_code="late_delivery",
+                is_delayed=is_delayed,
+                issue_code=issue_code,
                 ordered_items_summary=order.ordered_items_summary,
                 received_items_summary=order.ordered_items_summary,
                 events=events,
@@ -284,16 +289,8 @@ class OrderPlacementService:
 
         received_summary = order.ordered_items_summary
         issue_code: str | None = None
-        if selected_scenario == "missing_item":
-            issue_code = "missing_item"
-            received_summary = f"{order.ordered_items_summary or 'Order items'} (one item missing)"
-        elif selected_scenario == "wrong_item":
-            issue_code = "wrong_item"
-            received_summary = f"{order.ordered_items_summary or 'Order items'} (included wrong item)"
-        elif selected_scenario == "quality_issue":
-            issue_code = "quality_issue"
-            received_summary = f"{order.ordered_items_summary or 'Order items'} (quality issue reported)"
-
+        is_delayed = False
+        
         all_events = [
             ("accepted", 10 + offset),
             ("preparing", 20 + offset),
@@ -306,10 +303,25 @@ class OrderPlacementService:
             for event_name, seconds in all_events
             if seconds <= elapsed_seconds
         ]
+        
+        # Only reveal delivery outcome after order has been delivered (60 + offset seconds)
+        is_order_delivered = elapsed_seconds >= (60 + offset)
+        
+        if is_order_delivered:
+            if selected_scenario == "missing_item":
+                issue_code = "missing_item"
+                received_summary = f"{order.ordered_items_summary or 'Order items'} (one item missing)"
+            elif selected_scenario == "wrong_item":
+                issue_code = "wrong_item"
+                received_summary = f"{order.ordered_items_summary or 'Order items'} (included wrong item)"
+            elif selected_scenario == "quality_issue":
+                issue_code = "quality_issue"
+                received_summary = f"{order.ordered_items_summary or 'Order items'} (quality issue reported)"
+        
         return OrderLifecycleSimResponse(
             order_id=order_id,
             scenario_id=selected_scenario,
-            is_delayed=False,
+            is_delayed=is_delayed,
             issue_code=issue_code,
             ordered_items_summary=order.ordered_items_summary,
             received_items_summary=received_summary,
