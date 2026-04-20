@@ -18,6 +18,8 @@ export function OrdersPage() {
   const [dateToFilter, setDateToFilter] = useState('');
   const [refundOrder, setRefundOrder] = useState<t.Order | null>(null);
   const [refundReason, setRefundReason] = useState('');
+  const [refundSimulation, setRefundSimulation] = useState<t.OrderStateSim | null>(null);
+  const [refundSimulationLoading, setRefundSimulationLoading] = useState(false);
   const [refundLoading, setRefundLoading] = useState(false);
   const [refundError, setRefundError] = useState('');
   const [refundSuccess, setRefundSuccess] = useState<t.RefundRequest | null>(null);
@@ -130,6 +132,7 @@ export function OrdersPage() {
   const openRefundDialog = (order: t.Order) => {
     setRefundOrder(order);
     setRefundReason('');
+    setRefundSimulation(null);
     setRefundError('');
     setRefundSuccess(null);
   };
@@ -137,9 +140,33 @@ export function OrdersPage() {
   const closeRefundDialog = () => {
     setRefundOrder(null);
     setRefundReason('');
+    setRefundSimulation(null);
     setRefundError('');
     setRefundSuccess(null);
   };
+
+  useEffect(() => {
+    const loadRefundSimulation = async () => {
+      if (!refundOrder || !refundReason) {
+        setRefundSimulation(null);
+        return;
+      }
+
+      setRefundSimulationLoading(true);
+      try {
+        const simulation = await apiClient.getOrderStateSim(refundOrder.order_id, {
+          reasonCode: refundReason,
+        });
+        setRefundSimulation(simulation);
+      } catch {
+        setRefundSimulation(null);
+      } finally {
+        setRefundSimulationLoading(false);
+      }
+    };
+
+    void loadRefundSimulation();
+  }, [refundOrder?.order_id, refundReason]);
 
   const handleSubmitRefund = async () => {
     if (!refundOrder || !refundReason) {
@@ -319,6 +346,33 @@ export function OrdersPage() {
                     <option value="other">Other</option>
                   </select>
                 </div>
+
+                {refundReason && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
+                    <p className="font-semibold text-slate-900">Delivery evidence</p>
+                    {refundSimulationLoading ? (
+                      <p>Checking delivery simulation...</p>
+                    ) : refundSimulation ? (
+                      <>
+                        <p><span className="font-medium">Ordered:</span> {refundSimulation.ordered_items_summary || 'No summary available'}</p>
+                        <p>
+                          <span className="font-medium">Received:</span>{' '}
+                          {refundSimulation.received_items_summary || 'Order not delivered yet'}
+                        </p>
+                        <p>
+                          <span className="font-medium">Delay:</span>{' '}
+                          {refundSimulation.is_delayed ? 'Delayed delivery' : 'Delivered on time'}
+                        </p>
+                        <p>
+                          <span className="font-medium">Delivery state:</span>{' '}
+                          {refundSimulation.fulfillment_state}
+                        </p>
+                      </>
+                    ) : (
+                      <p>Could not load delivery evidence for this order.</p>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <Button variant="outline" onClick={closeRefundDialog}>

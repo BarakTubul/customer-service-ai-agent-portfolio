@@ -66,7 +66,7 @@ class RefundEligibilityCheckRequest(BaseModel):
     order_id: str
     reason_code: RefundReasonCode
     item_selections: list[ItemSelection] = []
-    simulation_scenario_id: str = "default"
+    simulation_scenario_id: str | None = None
 
 
 class MoneyAmount(BaseModel):
@@ -90,7 +90,7 @@ class RefundCreateRequest(BaseModel):
     order_id: str
     reason_code: RefundReasonCode
     item_selections: list[ItemSelection] = []
-    simulation_scenario_id: str = "default"
+    simulation_scenario_id: str | None = None
 
 class ManualReviewHandoff(BaseModel):
     escalation_status: ManualReviewEscalationStatus
@@ -137,4 +137,9 @@ class OrderStateSimResponse(BaseModel):
     simulation_scenario_id: str
     fulfillment_state: str
     payment_state: str
+    ordered_items_summary: str | None = None
+    received_items_summary: str | None = None
+    is_delayed: bool
+    eta_to: datetime | None = None
+    delivered_at: datetime | None = None
     state_timeline: list[dict[str, str]]

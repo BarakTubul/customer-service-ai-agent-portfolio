@@ -195,8 +195,14 @@ export interface ManualReviewQueueResponse {
 
 export interface OrderStateSim {
   order_id: string;
+  simulation_scenario_id: string;
   fulfillment_state: string;
   payment_state: string;
+  ordered_items_summary?: string | null;
+  received_items_summary?: string | null;
+  is_delayed: boolean;
+  eta_to?: string | null;
+  delivered_at?: string | null;
   state_timeline: Array<{
     date: string;
     event: string;
@@ -334,5 +340,4 @@ export interface RefundCheckRequest {
 export interface RefundCreateRequest {
   order_id: string;
   reason_code: string;
-  simulation_scenario_id?: string;
 }

@@ -13,6 +13,7 @@ from app.schemas.refund import (
     RefundCreateRequest,
     RefundEligibilityCheckRequest,
     RefundEligibilityCheckResponse,
+    RefundReasonCode,
     RefundRequestResponse,
 )
 from app.services.refund_service import RefundService
@@ -59,11 +60,17 @@ def get_refund_request(
 @router.get("/orders/{order_id}/state-sim", response_model=OrderStateSimResponse)
 def get_order_state_sim(
     order_id: str,
-    scenario_id: str = Query(default="default"),
+    scenario_id: str | None = Query(default=None),
+    reason_code: RefundReasonCode | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     refund_service: RefundService = Depends(get_refund_service),
 ) -> OrderStateSimResponse:
-    return refund_service.get_order_state_sim(user=current_user, order_id=order_id, scenario_id=scenario_id)
+    return refund_service.get_order_state_sim(
+        user=current_user,
+        order_id=order_id,
+        scenario_id=scenario_id,
+        reason_code=reason_code,
+    )
 
 
 @router.get("/admin/refunds/manual-review/queue", response_model=ManualReviewQueueResponse)

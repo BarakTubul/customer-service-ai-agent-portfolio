@@ -423,8 +423,16 @@ class APIClient {
     return response.data;
   }
 
-  async getOrderStateSim(orderId: string): Promise<t.OrderStateSim> {
-    const response = await this.client.get<t.OrderStateSim>(`/orders/${orderId}/state-sim`);
+  async getOrderStateSim(
+    orderId: string,
+    options?: { reasonCode?: string; scenarioId?: string }
+  ): Promise<t.OrderStateSim> {
+    const response = await this.client.get<t.OrderStateSim>(`/orders/${orderId}/state-sim`, {
+      params: {
+        reason_code: options?.reasonCode || undefined,
+        scenario_id: options?.scenarioId || undefined,
+      },
+    });
     return response.data;
   }
 
