@@ -66,6 +66,8 @@ class RefundService:
             simulation_scenario_id=order_state["fulfillment_state"],
             fulfillment_state=order_state["fulfillment_state"],
             payment_state=order_state["payment_state"],
+            issue_code=order_state["issue_code"],
+            is_delayed=bool(order_state["is_delayed"]),
             refund_window_hours=self.refund_window_hours,
             order_age_hours=self._calculate_order_age_hours(order),
         )
@@ -118,6 +120,8 @@ class RefundService:
             simulation_scenario_id=order_state["fulfillment_state"],
             fulfillment_state=order_state["fulfillment_state"],
             payment_state=order_state["payment_state"],
+            issue_code=order_state["issue_code"],
+            is_delayed=bool(order_state["is_delayed"]),
             refund_window_hours=self.refund_window_hours,
             order_age_hours=self._calculate_order_age_hours(order),
         )
@@ -302,6 +306,7 @@ class RefundService:
         return {
             "fulfillment_state": current_status,
             "payment_state": "captured",
+            "issue_code": timeline.issue_code,
             "ordered_items_summary": order.ordered_items_summary,
             "received_items_summary": received_items_summary,
             "is_delayed": bool(timeline.is_delayed) if delivered else False,

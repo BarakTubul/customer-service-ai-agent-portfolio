@@ -19,6 +19,7 @@ class RefundReasonCode(str, Enum):
 class RefundDecisionReasonCode(str, Enum):
     ELIGIBLE = "eligible"
     ELIGIBLE_PARTIAL = "eligible_partial"
+    OUTCOME_MISMATCH = "outcome_mismatch"
     PAYMENT_NOT_CAPTURED = "payment_not_captured"
     REFUND_WINDOW_EXPIRED = "refund_window_expired"
     NON_REFUNDABLE_ITEM = "non_refundable_item"

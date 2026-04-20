@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -25,6 +26,7 @@ from app.schemas.refund import (
 
 
 TEST_DATABASE_URL = "sqlite+pysqlite:///:memory:"
+SIMULATION_SCENARIOS = ("on_time", "late_delivery", "missing_item", "wrong_item", "quality_issue")
 
 
 def build_session() -> Session:
@@ -51,12 +53,27 @@ def _create_delivered_order(order_repo: OrderRepository, *, order_id: str, user_
     order_repo.db.refresh(order)
 
 
+def _pick_default_scenario(order_id: str) -> str:
+    seed = hashlib.sha256(order_id.encode("utf-8")).hexdigest()
+    idx = int(seed[:2], 16) % len(SIMULATION_SCENARIOS)
+    return SIMULATION_SCENARIOS[idx]
+
+
+def _order_id_for_scenario(prefix: str, scenario: str) -> str:
+    for idx in range(5000):
+        candidate = f"{prefix}-{idx}"
+        if _pick_default_scenario(candidate) == scenario:
+            return candidate
+    raise AssertionError(f"Could not find order id for scenario {scenario}")
+
+
 def test_eligibility_ineligible_for_expired_window() -> None:
     session = build_session()
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        order = order_repo.create(order_id="ord-r-1", user_id=user.id, total_cents=2500)
+        order_id = _order_id_for_scenario("ord-r-1", "late_delivery")
+        order = order_repo.create(order_id=order_id, user_id=user.id, total_cents=2500)
         order.updated_at = datetime.now(UTC) - timedelta(hours=72)
         order.created_at = order.updated_at
         session.add(order)
@@ -71,7 +88,7 @@ def test_eligibility_ineligible_for_expired_window() -> None:
         response = service.check_eligibility(
             user=user,
             payload=RefundEligibilityCheckRequest(
-                order_id="ord-r-1",
+                order_id=order_id,
                 reason_code=RefundReasonCode.LATE_DELIVERY,
                 simulation_scenario_id="delivered-happy",
             ),
@@ -92,7 +109,8 @@ def test_eligibility_partial_for_missing_item() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        _create_delivered_order(order_repo, order_id="ord-r-4", user_id=user.id, total_cents=2400)
+        order_id = _order_id_for_scenario("ord-r-4", "missing_item")
+        _create_delivered_order(order_repo, order_id=order_id, user_id=user.id, total_cents=2400)
 
         service = RefundService(
             order_repository=order_repo,
@@ -102,7 +120,7 @@ def test_eligibility_partial_for_missing_item() -> None:
         response = service.check_eligibility(
             user=user,
             payload=RefundEligibilityCheckRequest(
-                order_id="ord-r-4",
+                order_id=order_id,
                 reason_code=RefundReasonCode.MISSING_ITEM,
                 simulation_scenario_id="delivered-happy",
             ),
@@ -123,7 +141,8 @@ def test_create_request_idempotent_replay() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        _create_delivered_order(order_repo, order_id="ord-r-2", user_id=user.id, total_cents=3000)
+        order_id = _order_id_for_scenario("ord-r-2", "missing_item")
+        _create_delivered_order(order_repo, order_id=order_id, user_id=user.id, total_cents=3000)
         service = RefundService(
             order_repository=order_repo,
             refund_repository=RefundRepository(session),
@@ -131,7 +150,7 @@ def test_create_request_idempotent_replay() -> None:
         )
 
         payload = RefundCreateRequest(
-            order_id="ord-r-2",
+            order_id=order_id,
             reason_code=RefundReasonCode.MISSING_ITEM,
             simulation_scenario_id="default",
         )
@@ -164,7 +183,8 @@ def test_guest_cannot_submit_refund() -> None:
         guest = _create_user(session, is_guest=True)
         owner = _create_user(session)
         order_repo = OrderRepository(session)
-        _create_delivered_order(order_repo, order_id="ord-r-3", user_id=owner.id, total_cents=2000)
+        order_id = _order_id_for_scenario("ord-r-3", "late_delivery")
+        _create_delivered_order(order_repo, order_id=order_id, user_id=owner.id, total_cents=2000)
         service = RefundService(
             order_repository=order_repo,
             refund_repository=RefundRepository(session),
@@ -175,7 +195,7 @@ def test_guest_cannot_submit_refund() -> None:
             service.check_eligibility(
                 user=guest,
                 payload=RefundEligibilityCheckRequest(
-                    order_id="ord-r-3",
+                    order_id=order_id,
                     reason_code=RefundReasonCode.LATE_DELIVERY,
                     simulation_scenario_id="default",
                 ),
@@ -192,7 +212,8 @@ def test_create_request_manual_review_emits_handoff_contract() -> None:
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
-        _create_delivered_order(order_repo, order_id="ord-r-5", user_id=user.id, total_cents=2800)
+        order_id = _order_id_for_scenario("ord-r-5", "on_time")
+        _create_delivered_order(order_repo, order_id=order_id, user_id=user.id, total_cents=2800)
         service = RefundService(
             order_repository=order_repo,
             refund_repository=RefundRepository(session),
@@ -202,7 +223,7 @@ def test_create_request_manual_review_emits_handoff_contract() -> None:
         response = service.create_request(
             user=user,
             payload=RefundCreateRequest(
-                order_id="ord-r-5",
+                order_id=order_id,
                 reason_code=RefundReasonCode.FRAUD,
                 simulation_scenario_id="default",
             ),
@@ -219,7 +240,7 @@ def test_create_request_manual_review_emits_handoff_contract() -> None:
         replay = service.create_request(
             user=user,
             payload=RefundCreateRequest(
-                order_id="ord-r-5",
+                order_id=order_id,
                 reason_code=RefundReasonCode.FRAUD,
                 simulation_scenario_id="default",
             ),

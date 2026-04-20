@@ -37,6 +37,8 @@ class RefundPolicyEngine:
         simulation_scenario_id: str,
         fulfillment_state: str,
         payment_state: str,
+        issue_code: str | None,
+        is_delayed: bool,
         refund_window_hours: int,
         order_age_hours: float,
     ) -> RefundPolicyDecision:
@@ -100,6 +102,41 @@ class RefundPolicyEngine:
                     "refund_window_hours": refund_window_hours,
                 },
             )
+
+        expected_issue_by_reason = {
+            "missing_item": "missing_item",
+            "wrong_item": "wrong_item",
+            "quality_issue": "quality_issue",
+        }
+        if normalized_reason == "late_delivery":
+            if not is_delayed:
+                return RefundPolicyDecision(
+                    eligible=False,
+                    resolution_action=RefundResolutionAction.DENY,
+                    decision_reason_codes=[RefundDecisionReasonCode.OUTCOME_MISMATCH],
+                    refundable_ratio=0.0,
+                    explanation_template_key="refund.outcome_mismatch",
+                    explanation_params={
+                        "submitted_reason": normalized_reason,
+                        "issue_code": issue_code or "none",
+                        "is_delayed": is_delayed,
+                    },
+                )
+        elif normalized_reason in expected_issue_by_reason:
+            expected_issue = expected_issue_by_reason[normalized_reason]
+            if issue_code != expected_issue:
+                return RefundPolicyDecision(
+                    eligible=False,
+                    resolution_action=RefundResolutionAction.DENY,
+                    decision_reason_codes=[RefundDecisionReasonCode.OUTCOME_MISMATCH],
+                    refundable_ratio=0.0,
+                    explanation_template_key="refund.outcome_mismatch",
+                    explanation_params={
+                        "submitted_reason": normalized_reason,
+                        "issue_code": issue_code or "none",
+                        "expected_issue": expected_issue,
+                    },
+                )
 
         matched_policy = REASON_POLICIES.get(normalized_reason, DEFAULT_UNSUPPORTED_REASON_POLICY)
         return RefundPolicyDecision(
