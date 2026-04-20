@@ -57,6 +57,14 @@ def get_refund_request(
     return refund_service.get_request(user=current_user, refund_request_id=refund_request_id)
 
 
+@router.get("/refunds/requests", response_model=list[RefundRequestResponse])
+def list_user_refund_requests(
+    current_user: User = Depends(get_current_user),
+    refund_service: RefundService = Depends(get_refund_service),
+) -> list[RefundRequestResponse]:
+    return refund_service.list_user_requests(user=current_user)
+
+
 @router.get("/orders/{order_id}/state-sim", response_model=OrderStateSimResponse)
 def get_order_state_sim(
     order_id: str,

@@ -129,6 +129,38 @@ export function OrdersPage() {
     loadData();
   }, [isGuest, user?.email]);
 
+  // Listen for live order status updates
+  useEffect(() => {
+    const handleOrderNotifications = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const orderNotifications = customEvent.detail as Array<{ order_id: string; [key: string]: unknown }>;
+
+      if (!Array.isArray(orderNotifications)) return;
+
+      // Update statuses for orders with notifications
+      for (const notification of orderNotifications) {
+        const orderId = notification.order_id;
+        if (orderId && orders.some((o) => o.order_id === orderId)) {
+          try {
+            const timeline = await apiClient.getOrderTimeline(orderId);
+            setLatestStatuses((prev) => ({
+              ...prev,
+              [orderId]: timeline.current_status,
+            }));
+          } catch (err) {
+            console.error(`Failed to update status for order ${orderId}:`, err);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('order-notifications-received', handleOrderNotifications);
+
+    return () => {
+      window.removeEventListener('order-notifications-received', handleOrderNotifications);
+    };
+  }, [orders]);
+
   const openRefundDialog = (order: t.Order) => {
     if (getOrderStatus(order) !== 'delivered') {
       setRefundError('Refunds are available after delivery only.');

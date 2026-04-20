@@ -436,6 +436,11 @@ class APIClient {
     return response.data;
   }
 
+  async listUserRefundRequests(): Promise<t.RefundRequest[]> {
+    const response = await this.client.get<t.RefundRequest[]>('/refunds/requests');
+    return response.data;
+  }
+
   async getOrderStateSim(
     orderId: string,
     options?: { reasonCode?: string; scenarioId?: string }

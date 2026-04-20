@@ -211,6 +211,11 @@ class RefundService:
 
         return self._build_refund_response_from_row(row)
 
+    def list_user_requests(self, *, user: User, limit: int = 100) -> list[RefundRequestResponse]:
+        """List all refund requests for the current user."""
+        rows = self.refund_repository.list_by_user_id(user_id=user.id, limit=limit)
+        return [self._build_refund_response_from_row(row) for row in rows]
+
     def list_manual_review_queue(
         self,
         *,

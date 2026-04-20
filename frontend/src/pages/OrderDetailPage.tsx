@@ -57,6 +57,36 @@ export function OrderDetailPage() {
     loadOrder();
   }, [orderId]);
 
+  // Listen for live order updates
+  useEffect(() => {
+    if (!orderId) return;
+
+    const handleOrderNotifications = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const orderNotifications = customEvent.detail as Array<{ order_id: string; [key: string]: unknown }>;
+
+      if (!Array.isArray(orderNotifications)) return;
+
+      // Check if any notification is for this order
+      const hasMatchingOrder = orderNotifications.some((notification) => notification.order_id === orderId);
+
+      if (hasMatchingOrder) {
+        try {
+          const timelineResponse = await apiClient.getOrderTimeline(orderId);
+          setTimeline(timelineResponse);
+        } catch (err) {
+          console.error(`Failed to update timeline for order ${orderId}:`, err);
+        }
+      }
+    };
+
+    window.addEventListener('order-notifications-received', handleOrderNotifications);
+
+    return () => {
+      window.removeEventListener('order-notifications-received', handleOrderNotifications);
+    };
+  }, [orderId]);
+
   if (loading) {
     return <div className="p-6 text-center text-gray-500">Loading order...</div>;
   }
