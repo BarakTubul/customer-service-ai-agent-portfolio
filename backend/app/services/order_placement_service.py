@@ -29,6 +29,14 @@ _IDEMPOTENT_ORDERS: dict[tuple[int, str], OrderCreateResponse] = {}
 
 
 class OrderPlacementService:
+    _SIMULATION_SCENARIOS: tuple[str, ...] = (
+        "on_time",
+        "late_delivery",
+        "missing_item",
+        "wrong_item",
+        "quality_issue",
+    )
+
     def __init__(self, order_repository: OrderRepository) -> None:
         self.order_repository = order_repository
         self.settings = get_settings()
@@ -133,9 +141,10 @@ class OrderPlacementService:
         if payload.delivery_option not in {"standard", "express"}:
             issues.append("delivery_option must be one of: standard, express")
 
-        payment_guard_issue = self._validate_payment_reference(user, payload.payment_method_reference)
-        if payment_guard_issue:
-            issues.append(payment_guard_issue)
+        if not user.is_guest:
+            payment_guard_issue = self._validate_payment_reference(user, payload.payment_method_reference)
+            if payment_guard_issue:
+                issues.append(payment_guard_issue)
 
         delivery_fee = 300 if payload.delivery_option == "standard" else 650
         return CheckoutValidateResponse(
@@ -207,6 +216,7 @@ class OrderPlacementService:
         created_at = datetime.now(UTC)
         eta_from, eta_to = self._build_eta_window(created_at, payload.delivery_option)
         order_id = f"ord_{uuid.uuid4().hex[:10]}"
+        selected_scenario = self._pick_default_scenario(order_id)
         cart_snapshot = self._build_cart_response(user.id)
         ordered_items_summary = self._format_order_summary(cart_snapshot.items)
         order = self.order_repository.create(
@@ -224,6 +234,7 @@ class OrderPlacementService:
             status=order.status,
             status_label=order.status_label,
             total_cents=checkout.total_cents,
+            simulation_scenario_id=selected_scenario,
             payment_authorization_id=payment.authorization_id or "sim_auth_unknown",
             created_at=order.created_at,
             idempotent_replay=False,
@@ -234,23 +245,69 @@ class OrderPlacementService:
 
         return response
 
-    def get_order_lifecycle_sim(self, user: User, order_id: str, scenario_id: str) -> OrderLifecycleSimResponse:
+    def get_order_lifecycle_sim(self, user: User, order_id: str, scenario_id: str | None) -> OrderLifecycleSimResponse:
         order = self.order_repository.get_by_order_id(order_id)
         if order is None:
             raise NotFoundError("Order not found")
         if order.user_id != user.id:
             raise ForbiddenError("Order does not belong to current user")
 
-        seed = hashlib.sha256(f"{order_id}:{scenario_id}".encode("utf-8")).hexdigest()
+        selected_scenario = scenario_id or self._pick_default_scenario(order_id)
+        seed = hashlib.sha256(f"{order_id}:{selected_scenario}".encode("utf-8")).hexdigest()
         offset = int(seed[:2], 16) % 8
         base = order.created_at.astimezone(UTC)
+        if selected_scenario == "late_delivery":
+            events = [
+                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=2 + offset), event="accepted"),
+                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=10 + offset), event="preparing"),
+                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=24 + offset), event="driver_assigned"),
+                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=40 + offset), event="arriving"),
+                OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=62 + offset), event="delivered"),
+            ]
+            return OrderLifecycleSimResponse(
+                order_id=order_id,
+                scenario_id=selected_scenario,
+                is_delayed=True,
+                issue_code="late_delivery",
+                ordered_items_summary=order.ordered_items_summary,
+                received_items_summary=order.ordered_items_summary,
+                events=events,
+            )
+
+        received_summary = order.ordered_items_summary
+        issue_code: str | None = None
+        if selected_scenario == "missing_item":
+            issue_code = "missing_item"
+            received_summary = f"{order.ordered_items_summary or 'Order items'} (one item missing)"
+        elif selected_scenario == "wrong_item":
+            issue_code = "wrong_item"
+            received_summary = f"{order.ordered_items_summary or 'Order items'} (included wrong item)"
+        elif selected_scenario == "quality_issue":
+            issue_code = "quality_issue"
+            received_summary = f"{order.ordered_items_summary or 'Order items'} (quality issue reported)"
+
         events = [
             OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=2 + offset), event="accepted"),
             OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=8 + offset), event="preparing"),
             OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=18 + offset), event="driver_assigned"),
             OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=30 + offset), event="arriving"),
+            OrderLifecycleEventResponse(timestamp=base + timedelta(minutes=38 + offset), event="delivered"),
         ]
-        return OrderLifecycleSimResponse(order_id=order_id, scenario_id=scenario_id, events=events)
+        return OrderLifecycleSimResponse(
+            order_id=order_id,
+            scenario_id=selected_scenario,
+            is_delayed=False,
+            issue_code=issue_code,
+            ordered_items_summary=order.ordered_items_summary,
+            received_items_summary=received_summary,
+            events=events,
+        )
+
+    @classmethod
+    def _pick_default_scenario(cls, order_id: str) -> str:
+        seed = hashlib.sha256(order_id.encode("utf-8")).hexdigest()
+        idx = int(seed[:2], 16) % len(cls._SIMULATION_SCENARIOS)
+        return cls._SIMULATION_SCENARIOS[idx]
 
     def _build_cart_response(self, user_id: int) -> CartResponse:
         cart = _CARTS.setdefault(user_id, {})

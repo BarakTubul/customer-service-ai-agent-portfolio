@@ -19,6 +19,14 @@ from app.schemas.account import (
 
 
 class AccountOrderService:
+    _SIMULATION_SCENARIOS: tuple[str, ...] = (
+        "on_time",
+        "late_delivery",
+        "missing_item",
+        "wrong_item",
+        "quality_issue",
+    )
+
     def __init__(self, order_repository: OrderRepository, user_repository: UserRepository) -> None:
         self.order_repository = order_repository
         self.user_repository = user_repository
@@ -116,23 +124,17 @@ class AccountOrderService:
         *,
         user: User,
         order_id: str,
-        scenario_id: str,
+        scenario_id: str | None,
     ) -> OrderTimelineResponse:
         order = self.get_order(user=user, order_id=order_id)
-        seed = hashlib.sha256(f"{order_id}:{scenario_id}".encode("utf-8")).hexdigest()
+        selected_scenario = scenario_id or self._pick_default_scenario(order_id)
+        seed = hashlib.sha256(f"{order_id}:{selected_scenario}".encode("utf-8")).hexdigest()
         offset = int(seed[:2], 16) % 5
         base_time = order.created_at.astimezone(UTC)
         now = datetime.now(UTC)
-        simulated_now = max(now, base_time + timedelta(seconds=30 + offset))
-
-        stage_definitions = [
-            ("accepted", 2 + offset),
-            ("preparing", 8 + offset),
-            ("pickup", 18 + offset),
-            ("in_transit", 30 + offset),
-            ("arriving", 40 + offset),
-            ("delivered", 45 + offset),
-        ]
+        stage_definitions = self._build_timeline_stage_definitions(selected_scenario, offset)
+        latest_stage_seconds = stage_definitions[-1][1]
+        simulated_now = max(now, base_time + timedelta(seconds=latest_stage_seconds + 1))
 
         events = [
             OrderTimelineEvent(event=event_name, timestamp=base_time + timedelta(seconds=seconds_after), source="sim")
@@ -142,7 +144,60 @@ class AccountOrderService:
 
         if not events:
             events = [OrderTimelineEvent(event="accepted", timestamp=base_time + timedelta(seconds=2 + offset), source="sim")]
-        return OrderTimelineResponse(order_id=order.order_id, scenario_id=scenario_id, events=events)
+
+        ordered_summary = order.ordered_items_summary
+        received_summary = ordered_summary
+        issue_code: str | None = None
+        is_delayed = selected_scenario == "late_delivery"
+
+        if selected_scenario == "missing_item":
+            issue_code = "missing_item"
+            received_summary = f"{ordered_summary or 'Order items'} (one item missing)"
+        elif selected_scenario == "wrong_item":
+            issue_code = "wrong_item"
+            received_summary = f"{ordered_summary or 'Order items'} (included wrong item)"
+        elif selected_scenario == "quality_issue":
+            issue_code = "quality_issue"
+            received_summary = f"{ordered_summary or 'Order items'} (quality issue reported)"
+        elif selected_scenario == "late_delivery":
+            issue_code = "late_delivery"
+
+        return OrderTimelineResponse(
+            order_id=order.order_id,
+            scenario_id=selected_scenario,
+            is_delayed=is_delayed,
+            issue_code=issue_code,
+            ordered_items_summary=ordered_summary,
+            received_items_summary=received_summary,
+            events=events,
+        )
+
+    @classmethod
+    def _pick_default_scenario(cls, order_id: str) -> str:
+        seed = hashlib.sha256(order_id.encode("utf-8")).hexdigest()
+        idx = int(seed[:2], 16) % len(cls._SIMULATION_SCENARIOS)
+        return cls._SIMULATION_SCENARIOS[idx]
+
+    @staticmethod
+    def _build_timeline_stage_definitions(scenario_id: str, offset: int) -> list[tuple[str, int]]:
+        if scenario_id == "late_delivery":
+            return [
+                ("accepted", 2 + offset),
+                ("preparing", 10 + offset),
+                ("pickup", 22 + offset),
+                ("in_transit", 34 + offset),
+                ("arriving", 52 + offset),
+                ("delivered", 70 + offset),
+            ]
+
+        return [
+            ("accepted", 2 + offset),
+            ("preparing", 8 + offset),
+            ("pickup", 18 + offset),
+            ("in_transit", 30 + offset),
+            ("arriving", 40 + offset),
+            ("delivered", 45 + offset),
+        ]
 
     @staticmethod
     def _mask_email(email: str | None) -> str | None:

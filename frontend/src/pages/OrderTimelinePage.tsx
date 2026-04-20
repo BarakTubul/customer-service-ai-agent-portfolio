@@ -72,6 +72,21 @@ export function OrderTimelinePage() {
           <div className="mb-4 text-sm text-gray-700">
             <p className="font-semibold text-gray-500">Order status</p>
             <p>{order.status_label}</p>
+            {timeline.scenario_id && (
+              <p className="mt-1 text-xs text-gray-500">Simulation: {timeline.scenario_id}</p>
+            )}
+          </div>
+        )}
+
+        {(timeline.issue_code || timeline.is_delayed) && (
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-semibold">Delivery outcome</p>
+            <p>
+              {timeline.is_delayed ? 'Delayed delivery' : 'On-time delivery'}
+              {timeline.issue_code ? ` • ${timeline.issue_code.replace(/_/g, ' ')}` : ''}
+            </p>
+            <p className="mt-1"><span className="font-medium">Ordered:</span> {timeline.ordered_items_summary || 'N/A'}</p>
+            <p><span className="font-medium">Received:</span> {timeline.received_items_summary || 'N/A'}</p>
           </div>
         )}
 

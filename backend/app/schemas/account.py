@@ -50,4 +50,8 @@ class OrderResponse(BaseModel):
 class OrderTimelineResponse(BaseModel):
     order_id: str
     scenario_id: str
+    is_delayed: bool = False
+    issue_code: str | None = None
+    ordered_items_summary: str | None = None
+    received_items_summary: str | None = None
     events: list[OrderTimelineEvent]

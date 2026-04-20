@@ -59,7 +59,6 @@ export function OrderPlacementPage() {
     city: '',
   });
   const [paymentReference, setPaymentReference] = useState('');
-  const [scenario, setScenario] = useState('default');
   const [showCheckout, setShowCheckout] = useState(false);
   const [checkout, setCheckout] = useState<t.CheckoutValidateResponse | null>(null);
   const [orderResult, setOrderResult] = useState<t.OrderCreateResponse | null>(null);
@@ -234,7 +233,6 @@ export function OrderPlacementPage() {
           shipping_address: shippingAddress,
           delivery_option: deliveryOption,
           payment_method_reference: paymentReference,
-          simulation_scenario: scenario,
         },
         idempotencyKey
       );
@@ -535,12 +533,6 @@ export function OrderPlacementPage() {
                     </p>
                     <p className="text-xs text-cyan-800 mt-2">Tip: card numbers ending with 0000 simulate payment decline.</p>
                   </div>
-                  <Input
-                    label="Scenario"
-                    value={scenario}
-                    onChange={(e) => setScenario(e.target.value)}
-                    placeholder="default"
-                  />
                 </div>
 
                 <div className="mt-4 flex gap-3">

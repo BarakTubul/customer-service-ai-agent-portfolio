@@ -94,7 +94,7 @@ class OrderCreateRequest(BaseModel):
     shipping_address: ShippingAddressRequest
     delivery_option: str = Field(min_length=3, max_length=32)
     payment_method_reference: str = Field(min_length=3, max_length=128)
-    simulation_scenario: str = Field(default="default", min_length=3, max_length=64)
+    simulation_scenario: str | None = Field(default=None, min_length=3, max_length=64)
 
 
 class OrderCreateResponse(BaseModel):
@@ -102,6 +102,7 @@ class OrderCreateResponse(BaseModel):
     status: str
     status_label: str
     total_cents: int
+    simulation_scenario_id: str | None = None
     currency: str = "USD"
     payment_authorization_id: str
     idempotent_replay: bool = False
@@ -117,4 +118,8 @@ class OrderLifecycleEventResponse(BaseModel):
 class OrderLifecycleSimResponse(BaseModel):
     order_id: str
     scenario_id: str
+    is_delayed: bool = False
+    issue_code: str | None = None
+    ordered_items_summary: str | None = None
+    received_items_summary: str | None = None
     events: list[OrderLifecycleEventResponse]

@@ -62,7 +62,7 @@ def get_order(
 @router.get("/orders/{order_id}/timeline-sim", response_model=OrderTimelineResponse)
 def get_order_timeline_sim(
     order_id: str,
-    scenario_id: str = Query(default="default"),
+    scenario_id: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     account_order_service: AccountOrderService = Depends(get_account_order_service),
 ) -> OrderTimelineResponse:

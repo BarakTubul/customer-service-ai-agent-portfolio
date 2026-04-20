@@ -63,6 +63,11 @@ export interface Order {
 
 export interface OrderTimeline {
   order_id: string;
+  scenario_id?: string;
+  is_delayed?: boolean;
+  issue_code?: string | null;
+  ordered_items_summary?: string | null;
+  received_items_summary?: string | null;
   current_status: string;
   timeline: Array<{
     date: string;
@@ -299,7 +304,6 @@ export interface OrderCreateRequest {
   shipping_address: ShippingAddress;
   delivery_option: 'standard' | 'express';
   payment_method_reference: string;
-  simulation_scenario?: string;
 }
 
 export interface OrderCreateResponse {
@@ -307,6 +311,7 @@ export interface OrderCreateResponse {
   status: string;
   status_label: string;
   total_cents: number;
+  simulation_scenario_id?: string | null;
   currency: string;
   payment_authorization_id: string;
   idempotent_replay: boolean;

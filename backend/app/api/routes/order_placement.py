@@ -129,7 +129,7 @@ def create_order(
 @router.get("/orders/{order_id}/lifecycle-sim", response_model=OrderLifecycleSimResponse)
 def get_order_lifecycle_sim(
     order_id: str,
-    scenario_id: str = Query(default="default"),
+    scenario_id: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     order_placement_service: OrderPlacementService = Depends(get_order_placement_service),
 ) -> OrderLifecycleSimResponse:

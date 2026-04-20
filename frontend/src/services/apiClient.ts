@@ -206,6 +206,10 @@ class APIClient {
     const response = await this.client.get<{
       order_id: string;
       scenario_id: string;
+      is_delayed?: boolean;
+      issue_code?: string | null;
+      ordered_items_summary?: string | null;
+      received_items_summary?: string | null;
       events: Array<{ event: string; timestamp: string; source: string }>;
     }>(`/orders/${orderId}/timeline-sim`);
 
@@ -218,6 +222,11 @@ class APIClient {
 
     return {
       order_id: response.data.order_id,
+      scenario_id: response.data.scenario_id,
+      is_delayed: response.data.is_delayed,
+      issue_code: response.data.issue_code,
+      ordered_items_summary: response.data.ordered_items_summary,
+      received_items_summary: response.data.received_items_summary,
       current_status:
         filteredEvents.length > 0
           ? filteredEvents[filteredEvents.length - 1].event
