@@ -60,6 +60,17 @@ export function Header() {
           seenNotificationIds.current.add(notification.notification_id);
         });
 
+        const orderNotifications = newNotifications.filter(
+          (notification) => notification.kind === 'order' && !!notification.order_id
+        );
+        if (orderNotifications.length > 0) {
+          window.dispatchEvent(
+            new CustomEvent('order-notifications-received', {
+              detail: orderNotifications,
+            })
+          );
+        }
+
         setNotifications((current) => [...newNotifications, ...current].slice(0, 6));
 
         const alertText = newNotifications

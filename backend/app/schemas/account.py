@@ -54,4 +54,6 @@ class OrderTimelineResponse(BaseModel):
     issue_code: str | None = None
     ordered_items_summary: str | None = None
     received_items_summary: str | None = None
+    eta_from: datetime | None = None
+    eta_to: datetime | None = None
     events: list[OrderTimelineEvent]

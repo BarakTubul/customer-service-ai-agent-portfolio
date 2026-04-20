@@ -27,7 +27,7 @@ export function OrderDetailPage() {
   const navigate = useNavigate();
   const { isGuest } = useAuth();
   const [order, setOrder] = useState<t.Order | null>(null);
-  const [timelineStatus, setTimelineStatus] = useState('');
+  const [timeline, setTimeline] = useState<t.OrderTimeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -46,7 +46,7 @@ export function OrderDetailPage() {
           apiClient.getOrderTimeline(orderId),
         ]);
         setOrder(response);
-        setTimelineStatus(timelineResponse.current_status);
+        setTimeline(timelineResponse);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load order');
       } finally {
@@ -90,7 +90,7 @@ export function OrderDetailPage() {
         <div className="grid gap-4 sm:grid-cols-2 text-sm text-gray-700">
           <div>
             <p className="font-semibold text-gray-500">Latest timeline status</p>
-            <p>{timelineStatus || order.status_label}</p>
+            <p>{timeline?.current_status || order.status_label}</p>
           </div>
           <div>
             <p className="font-semibold text-gray-500">Created</p>
@@ -104,15 +104,19 @@ export function OrderDetailPage() {
             <p className="font-semibold text-gray-500">Price</p>
             <p>{order.total_cents != null ? formatCents(order.total_cents) : 'Not available'}</p>
           </div>
-          <div>
-            <p className="font-semibold text-gray-500">ETA</p>
-            <p>
-              {order.eta_from && order.eta_to
-                ? `${new Date(order.eta_from).toLocaleTimeString()} - ${new Date(order.eta_to).toLocaleTimeString()}`
-                : 'Not available yet'}
-            </p>
-          </div>
         </div>
+
+        {timeline && (timeline.issue_code || timeline.is_delayed) && (
+          <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-semibold">Delivery outcome</p>
+            <p>
+              {timeline.is_delayed ? 'Delayed delivery' : 'On-time delivery'}
+              {timeline.issue_code ? ` • ${timeline.issue_code.replace(/_/g, ' ')}` : ''}
+            </p>
+            <p className="mt-1"><span className="font-medium">Ordered:</span> {timeline.ordered_items_summary || 'N/A'}</p>
+            <p><span className="font-medium">Received:</span> {timeline.received_items_summary || 'N/A'}</p>
+          </div>
+        )}
 
         <p className="mt-4 text-sm text-gray-600">The live progress appears in the timeline.</p>
 

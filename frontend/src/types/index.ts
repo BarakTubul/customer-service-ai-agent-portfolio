@@ -68,6 +68,8 @@ export interface OrderTimeline {
   issue_code?: string | null;
   ordered_items_summary?: string | null;
   received_items_summary?: string | null;
+  eta_from?: string | null;
+  eta_to?: string | null;
   current_status: string;
   timeline: Array<{
     date: string;

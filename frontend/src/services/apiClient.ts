@@ -210,6 +210,8 @@ class APIClient {
       issue_code?: string | null;
       ordered_items_summary?: string | null;
       received_items_summary?: string | null;
+      eta_from?: string | null;
+      eta_to?: string | null;
       events: Array<{ event: string; timestamp: string; source: string }>;
     }>(`/orders/${orderId}/timeline-sim`);
 
@@ -227,6 +229,8 @@ class APIClient {
       issue_code: response.data.issue_code,
       ordered_items_summary: response.data.ordered_items_summary,
       received_items_summary: response.data.received_items_summary,
+      eta_from: response.data.eta_from,
+      eta_to: response.data.eta_to,
       current_status:
         filteredEvents.length > 0
           ? filteredEvents[filteredEvents.length - 1].event

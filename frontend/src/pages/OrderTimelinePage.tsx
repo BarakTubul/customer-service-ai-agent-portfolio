@@ -13,29 +13,68 @@ export function OrderTimelinePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const loadTimeline = async () => {
-      if (!orderId) {
-        setError('Missing order id');
-        setLoading(false);
-        return;
-      }
+    if (!orderId) {
+      setError('Missing order id');
+      setLoading(false);
+      return;
+    }
 
+    let isMounted = true;
+
+    const loadInitial = async () => {
       try {
         setError('');
         const [orderResponse, timelineResponse] = await Promise.all([
           apiClient.getOrderDetail(orderId),
           apiClient.getOrderTimeline(orderId),
         ]);
+        if (!isMounted) {
+          return;
+        }
         setOrder(orderResponse);
         setTimeline(timelineResponse);
       } catch (err) {
+        if (!isMounted) {
+          return;
+        }
         setError(err instanceof Error ? err.message : 'Failed to load timeline');
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    loadTimeline();
+    const refreshTimeline = async () => {
+      try {
+        const timelineResponse = await apiClient.getOrderTimeline(orderId);
+        if (!isMounted) {
+          return;
+        }
+        setTimeline(timelineResponse);
+      } catch {
+        // Keep existing timeline and avoid noisy real-time errors.
+      }
+    };
+
+    const handleNotificationRefresh = (event: Event) => {
+      const customEvent = event as CustomEvent<t.LiveNotification[]>;
+      const notifications = customEvent.detail || [];
+      const hasMatchingOrderUpdate = notifications.some(
+        (notification) => notification.order_id === orderId
+      );
+      if (hasMatchingOrderUpdate) {
+        void refreshTimeline();
+      }
+    };
+
+    void loadInitial();
+    window.addEventListener('order-notifications-received', handleNotificationRefresh as EventListener);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('order-notifications-received', handleNotificationRefresh as EventListener);
+    };
   }, [orderId]);
 
   if (loading) {
@@ -72,21 +111,12 @@ export function OrderTimelinePage() {
           <div className="mb-4 text-sm text-gray-700">
             <p className="font-semibold text-gray-500">Order status</p>
             <p>{order.status_label}</p>
-            {timeline.scenario_id && (
-              <p className="mt-1 text-xs text-gray-500">Simulation: {timeline.scenario_id}</p>
+            {timeline.eta_from && timeline.eta_to && (
+              <p className="mt-1 text-xs text-gray-500">
+                ETA (simulated): {new Date(timeline.eta_from).toLocaleTimeString()} -{' '}
+                {new Date(timeline.eta_to).toLocaleTimeString()}
+              </p>
             )}
-          </div>
-        )}
-
-        {(timeline.issue_code || timeline.is_delayed) && (
-          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-semibold">Delivery outcome</p>
-            <p>
-              {timeline.is_delayed ? 'Delayed delivery' : 'On-time delivery'}
-              {timeline.issue_code ? ` • ${timeline.issue_code.replace(/_/g, ' ')}` : ''}
-            </p>
-            <p className="mt-1"><span className="font-medium">Ordered:</span> {timeline.ordered_items_summary || 'N/A'}</p>
-            <p><span className="font-medium">Received:</span> {timeline.received_items_summary || 'N/A'}</p>
           </div>
         )}
 

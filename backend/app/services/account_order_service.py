@@ -134,6 +134,10 @@ class AccountOrderService:
         now = datetime.now(UTC)
         stage_definitions = self._build_timeline_stage_definitions(selected_scenario, offset)
         elapsed_seconds = (now - base_time).total_seconds()
+        delivered_seconds = stage_definitions[-1][1]
+        simulated_eta_center = base_time + timedelta(seconds=delivered_seconds)
+        simulated_eta_from = simulated_eta_center - timedelta(seconds=10)
+        simulated_eta_to = simulated_eta_center + timedelta(seconds=10)
 
         events = [
             OrderTimelineEvent(event=event_name, timestamp=base_time + timedelta(seconds=seconds_after), source="sim")
@@ -150,7 +154,7 @@ class AccountOrderService:
         is_delayed = False
         
         # Only reveal delivery outcome after order has been delivered
-        delivered_time = stage_definitions[-1][1]  # Last event is always "delivered"
+        delivered_time = delivered_seconds  # Last event is always "delivered"
         is_order_delivered = elapsed_seconds >= delivered_time
 
         if is_order_delivered:
@@ -175,6 +179,8 @@ class AccountOrderService:
             issue_code=issue_code,
             ordered_items_summary=ordered_summary,
             received_items_summary=received_summary,
+            eta_from=simulated_eta_from,
+            eta_to=simulated_eta_to,
             events=events,
         )
 
