@@ -24,11 +24,13 @@ function formatCents(cents: number, currency = 'USD'): string {
 
 function getStatusBadgeColor(status: string): string {
   switch (status) {
+    case 'submitted':
     case 'approved':
       return 'bg-green-100 text-green-900';
     case 'denied':
       return 'bg-red-100 text-red-900';
     case 'pending':
+    case 'pending_manual_review':
       return 'bg-yellow-100 text-yellow-900';
     case 'resolved':
       return 'bg-green-100 text-green-900';
@@ -41,6 +43,53 @@ function getStatusBadgeColor(status: string): string {
     default:
       return 'bg-gray-100 text-gray-900';
   }
+}
+
+function mapDecisionReasonToMessage(code: string): string {
+  switch (code) {
+    case 'payment_not_captured':
+      return 'Payment is not processed yet. You can request a refund only after payment is captured.';
+    case 'refund_window_expired':
+      return 'The refund window has expired for this order.';
+    case 'fulfillment_not_completed':
+      return 'The order is not completed yet. Refund checks are available after delivery.';
+    case 'manual_review_required':
+      return 'This request needs manual review by a manager.';
+    case 'eligible_partial':
+      return 'This request is eligible for a partial refund.';
+    case 'eligible':
+      return 'This request is eligible for a refund.';
+    case 'reason_code_not_supported':
+      return 'This reason is currently not supported for automatic refund processing.';
+    case 'non_refundable_item':
+      return 'This item is marked as non-refundable under the current policy.';
+    default:
+      return code.replace(/_/g, ' ');
+  }
+}
+
+function getSimpleRefundStatusMessage(refund: t.RefundRequest): string {
+  if (refund.decision_reason_codes.includes('payment_not_captured')) {
+    return 'Payment is not processed yet. Please try again after payment is captured.';
+  }
+
+  if (refund.status === 'pending_manual_review') {
+    return 'Your request is waiting for manual review. We will update this page once reviewed.';
+  }
+
+  if (refund.status === 'submitted') {
+    return 'Your request was submitted and is being processed.';
+  }
+
+  if (refund.status === 'resolved') {
+    return 'Your request was reviewed and resolved.';
+  }
+
+  if (refund.status === 'denied') {
+    return 'This request was not approved based on current policy checks.';
+  }
+
+  return 'Your request is being processed.';
 }
 
 export function RefundsTabPage() {
@@ -98,7 +147,7 @@ export function RefundsTabPage() {
       <Card>
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Refund Applications</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Track all your refund applications and their current status.
+          Track your refund history and open each request for full details.
         </p>
 
         {refunds.length === 0 ? (
@@ -141,11 +190,12 @@ export function RefundsTabPage() {
                     <p className="text-sm text-gray-500 mt-1">
                       Submitted: {formatCreatedAt(refund.created_at)}
                     </p>
+                    <p className="text-sm text-gray-700 mt-1">{getSimpleRefundStatusMessage(refund)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {refund.refundable_amount_value != null && (
                       <p className="font-semibold text-gray-900">
-                        {formatCents(refund.refundable_amount_value * 100)}
+                        {formatCents(Math.round(refund.refundable_amount_value * 100), refund.refundable_amount_currency || 'USD')}
                       </p>
                     )}
                     <svg
@@ -179,17 +229,27 @@ export function RefundsTabPage() {
                       </div>
                       {refund.status_reason && (
                         <div>
-                          <p className="text-xs font-semibold text-gray-500 uppercase">Status Reason</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase">Internal Status</p>
                           <p className="text-sm text-gray-900 mt-1">
                             {refund.status_reason.replace(/_/g, ' ')}
                           </p>
+                        </div>
+                      )}
+                      {refund.decision_reason_codes.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase">What this means</p>
+                          <ul className="mt-1 list-disc pl-5 text-sm text-gray-900 space-y-1">
+                            {refund.decision_reason_codes.map((code) => (
+                              <li key={code}>{mapDecisionReasonToMessage(code)}</li>
+                            ))}
+                          </ul>
                         </div>
                       )}
                       {refund.refundable_amount_value != null && (
                         <div>
                           <p className="text-xs font-semibold text-gray-500 uppercase">Refund Amount</p>
                           <p className="text-sm text-gray-900 mt-1">
-                            {formatCents(refund.refundable_amount_value * 100)}
+                            {formatCents(Math.round(refund.refundable_amount_value * 100), refund.refundable_amount_currency || 'USD')}
                           </p>
                         </div>
                       )}
@@ -210,15 +270,18 @@ export function RefundsTabPage() {
                             {new Date(refund.manual_review_handoff.sla_deadline_at).toLocaleString()}
                           </p>
                         )}
+                        {refund.manual_review_handoff.reviewer_note && (
+                          <p className="text-xs text-yellow-700 mt-2">
+                            Reviewer note: {refund.manual_review_handoff.reviewer_note}
+                          </p>
+                        )}
                       </div>
                     )}
 
-                    {refund.explanation && (
-                      <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
-                        <p className="text-xs font-semibold text-blue-900 uppercase mb-1">Details</p>
-                        <p className="text-sm text-blue-800">{refund.explanation}</p>
-                      </div>
-                    )}
+                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-xs font-semibold text-blue-900 uppercase mb-1">Summary</p>
+                      <p className="text-sm text-blue-800">{getSimpleRefundStatusMessage(refund)}</p>
+                    </div>
 
                     <div className="flex gap-2 pt-2">
                       <Button

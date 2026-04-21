@@ -18,8 +18,6 @@ export function OrdersPage() {
   const [dateToFilter, setDateToFilter] = useState('');
   const [refundOrder, setRefundOrder] = useState<t.Order | null>(null);
   const [refundReason, setRefundReason] = useState('');
-  const [refundSimulation, setRefundSimulation] = useState<t.OrderStateSim | null>(null);
-  const [refundSimulationLoading, setRefundSimulationLoading] = useState(false);
   const [refundLoading, setRefundLoading] = useState(false);
   const [refundError, setRefundError] = useState('');
   const [refundSuccess, setRefundSuccess] = useState<t.RefundRequest | null>(null);
@@ -129,46 +127,9 @@ export function OrdersPage() {
     loadData();
   }, [isGuest, user?.email]);
 
-  // Listen for live order status updates
-  useEffect(() => {
-    const handleOrderNotifications = async (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const orderNotifications = customEvent.detail as Array<{ order_id: string; [key: string]: unknown }>;
-
-      if (!Array.isArray(orderNotifications)) return;
-
-      // Update statuses for orders with notifications
-      for (const notification of orderNotifications) {
-        const orderId = notification.order_id;
-        if (orderId && orders.some((o) => o.order_id === orderId)) {
-          try {
-            const timeline = await apiClient.getOrderTimeline(orderId);
-            setLatestStatuses((prev) => ({
-              ...prev,
-              [orderId]: timeline.current_status,
-            }));
-          } catch (err) {
-            console.error(`Failed to update status for order ${orderId}:`, err);
-          }
-        }
-      }
-    };
-
-    window.addEventListener('order-notifications-received', handleOrderNotifications);
-
-    return () => {
-      window.removeEventListener('order-notifications-received', handleOrderNotifications);
-    };
-  }, [orders]);
-
   const openRefundDialog = (order: t.Order) => {
-    if (getOrderStatus(order) !== 'delivered') {
-      setRefundError('Refunds are available after delivery only.');
-      return;
-    }
     setRefundOrder(order);
     setRefundReason('');
-    setRefundSimulation(null);
     setRefundError('');
     setRefundSuccess(null);
   };
@@ -176,33 +137,9 @@ export function OrdersPage() {
   const closeRefundDialog = () => {
     setRefundOrder(null);
     setRefundReason('');
-    setRefundSimulation(null);
     setRefundError('');
     setRefundSuccess(null);
   };
-
-  useEffect(() => {
-    const loadRefundSimulation = async () => {
-      if (!refundOrder || !refundReason) {
-        setRefundSimulation(null);
-        return;
-      }
-
-      setRefundSimulationLoading(true);
-      try {
-        const simulation = await apiClient.getOrderStateSim(refundOrder.order_id, {
-          reasonCode: refundReason,
-        });
-        setRefundSimulation(simulation);
-      } catch {
-        setRefundSimulation(null);
-      } finally {
-        setRefundSimulationLoading(false);
-      }
-    };
-
-    void loadRefundSimulation();
-  }, [refundOrder?.order_id, refundReason]);
 
   const handleSubmitRefund = async () => {
     if (!refundOrder || !refundReason) {
@@ -312,13 +249,7 @@ export function OrdersPage() {
                     </p>
                   </button>
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openRefundDialog(order)}
-                      disabled={getOrderStatus(order) !== 'delivered'}
-                      title={getOrderStatus(order) !== 'delivered' ? 'Refunds are available after delivery' : undefined}
-                    >
+                    <Button size="sm" variant="outline" onClick={() => openRefundDialog(order)}>
                       Refund
                     </Button>
                     <Button size="sm" onClick={() => navigate(`/orders/${order.order_id}`)} variant="outline">
@@ -357,13 +288,13 @@ export function OrdersPage() {
               <div className="space-y-3 rounded-lg border border-green-200 bg-green-50 p-4">
                 <p className="font-semibold text-green-900">Refund request submitted</p>
                 <p className="text-sm text-green-800">Request ID: {refundSuccess.refund_request_id}</p>
-                <p className="text-sm text-green-800">Status: {refundSuccess.status}</p>
                 <p className="text-sm text-green-800">
-                  {refundSuccess.manual_review_handoff
-                    ? `This refund is queued for manual review (${refundSuccess.manual_review_handoff.queue_name}).`
-                    : 'This refund was submitted successfully.'}
+                  Your request was submitted successfully. You can track progress and view details in Refund History.
                 </p>
                 <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="secondary" onClick={() => navigate('/refunds')}>
+                    Go to Refund History
+                  </Button>
                   <Button variant="outline" onClick={closeRefundDialog}>
                     Done
                   </Button>
@@ -388,33 +319,6 @@ export function OrdersPage() {
                     <option value="other">Other</option>
                   </select>
                 </div>
-
-                {refundReason && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
-                    <p className="font-semibold text-slate-900">Delivery evidence</p>
-                    {refundSimulationLoading ? (
-                      <p>Checking delivery state...</p>
-                    ) : refundSimulation ? (
-                      <>
-                        <p><span className="font-medium">Ordered:</span> {refundSimulation.ordered_items_summary || 'No summary available'}</p>
-                        <p>
-                          <span className="font-medium">Received:</span>{' '}
-                          {refundSimulation.received_items_summary || 'Order not delivered yet'}
-                        </p>
-                        <p>
-                          <span className="font-medium">Delay:</span>{' '}
-                          {refundSimulation.is_delayed ? 'Delayed delivery' : 'Delivered on time'}
-                        </p>
-                        <p>
-                          <span className="font-medium">Delivery state:</span>{' '}
-                          {refundSimulation.fulfillment_state}
-                        </p>
-                      </>
-                    ) : (
-                      <p>Could not load delivery evidence for this order.</p>
-                    )}
-                  </div>
-                )}
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <Button variant="outline" onClick={closeRefundDialog}>

@@ -22,8 +22,8 @@ export function Header() {
       ]
     : [
         { label: 'My Orders', path: '/orders' },
+        { label: 'Refund History', path: '/refunds' },
         { label: 'Order', path: '/order' },
-        { label: 'Refunds', path: '/refunds' },
       ];
 
   useEffect(() => {
@@ -59,17 +59,6 @@ export function Header() {
         newNotifications.forEach((notification) => {
           seenNotificationIds.current.add(notification.notification_id);
         });
-
-        const orderNotifications = newNotifications.filter(
-          (notification) => notification.kind === 'order' && !!notification.order_id
-        );
-        if (orderNotifications.length > 0) {
-          window.dispatchEvent(
-            new CustomEvent('order-notifications-received', {
-              detail: orderNotifications,
-            })
-          );
-        }
 
         setNotifications((current) => [...newNotifications, ...current].slice(0, 6));
 

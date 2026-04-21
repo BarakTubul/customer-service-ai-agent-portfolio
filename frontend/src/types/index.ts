@@ -173,9 +173,18 @@ export interface RefundEligibilityResponse {
 export interface RefundRequest {
   refund_request_id: string;
   order_id: string;
+  reason_code: string;
   status: string;
   status_reason?: string;
   manual_review_handoff?: ManualReviewHandoff | null;
+  decision_reason_codes: string[];
+  policy_version?: string | null;
+  policy_reference?: string | null;
+  resolution_action?: string | null;
+  refundable_amount_currency?: string | null;
+  refundable_amount_value?: number | null;
+  explanation_template_key?: string | null;
+  explanation_params?: Record<string, string | number | boolean> | null;
   idempotent_replay: boolean;
   created_at: string;
 }
@@ -185,6 +194,11 @@ export interface ManualReviewHandoff {
   queue_name: string;
   sla_deadline_at: string;
   payload: Record<string, string | number | boolean>;
+  claimed_by_admin_user_id?: number | null;
+  claimed_at?: string | null;
+  decided_by_admin_user_id?: number | null;
+  decided_at?: string | null;
+  reviewer_note?: string | null;
 }
 
 export interface ManualReviewQueueItem {

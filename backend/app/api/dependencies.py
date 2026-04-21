@@ -80,12 +80,12 @@ def get_notification_service(
 def get_refund_service(
     order_repository: OrderRepository = Depends(get_order_repository),
     refund_repository: RefundRepository = Depends(get_refund_repository),
-    account_order_service: AccountOrderService = Depends(get_account_order_service),
 ) -> RefundService:
+    settings = get_settings()
     return RefundService(
         order_repository=order_repository,
         refund_repository=refund_repository,
-        account_order_service=account_order_service,
+        refund_window_hours=settings.refund_window_hours,
     )
 
 
