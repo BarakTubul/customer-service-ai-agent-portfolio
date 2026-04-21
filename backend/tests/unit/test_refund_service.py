@@ -11,6 +11,7 @@ from app.db.base import Base
 from app.models.user import User
 from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
+from app.repositories.user_repository import UserRepository
 from app.services.refund_service import RefundService
 from app.schemas.refund import (
     RefundCreateRequest,
@@ -18,6 +19,7 @@ from app.schemas.refund import (
     RefundEligibilityCheckRequest,
     RefundPolicyVersion,
     RefundReasonCode,
+    RefundRequestStatus,
     RefundResolutionAction,
 )
 
@@ -50,7 +52,12 @@ def test_eligibility_ineligible_for_expired_window() -> None:
         session.add(order)
         session.commit()
 
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session), refund_window_hours=24)
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            user_repository=UserRepository(session),
+            refund_window_hours=24,
+        )
         response = service.check_eligibility(
             user=user,
             payload=RefundEligibilityCheckRequest(
@@ -77,7 +84,11 @@ def test_eligibility_partial_for_missing_item() -> None:
         order_repo = OrderRepository(session)
         order_repo.create(order_id="ord-r-4", user_id=user.id, total_cents=2400)
 
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            user_repository=UserRepository(session),
+        )
         response = service.check_eligibility(
             user=user,
             payload=RefundEligibilityCheckRequest(
@@ -97,13 +108,45 @@ def test_eligibility_partial_for_missing_item() -> None:
         session.close()
 
 
+def test_eligibility_denies_when_order_payment_not_captured() -> None:
+    session = build_session()
+    try:
+        user = _create_user(session)
+        order_repo = OrderRepository(session)
+        order_repo.create(order_id="ord-r-payment-1", user_id=user.id, total_cents=2400, payment_state="pending")
+
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            user_repository=UserRepository(session),
+        )
+        response = service.check_eligibility(
+            user=user,
+            payload=RefundEligibilityCheckRequest(
+                order_id="ord-r-payment-1",
+                reason_code=RefundReasonCode.MISSING_ITEM,
+                simulation_scenario_id="default",
+            ),
+        )
+
+        assert response.eligible is False
+        assert response.resolution_action == RefundResolutionAction.DENY
+        assert RefundDecisionReasonCode.PAYMENT_NOT_CAPTURED in response.decision_reason_codes
+    finally:
+        session.close()
+
+
 def test_create_request_idempotent_replay() -> None:
     session = build_session()
     try:
         user = _create_user(session)
         order_repo = OrderRepository(session)
         order_repo.create(order_id="ord-r-2", user_id=user.id, total_cents=3000)
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            user_repository=UserRepository(session),
+        )
 
         payload = RefundCreateRequest(
             order_id="ord-r-2",
@@ -140,7 +183,11 @@ def test_guest_cannot_submit_refund() -> None:
         owner = _create_user(session)
         order_repo = OrderRepository(session)
         order_repo.create(order_id="ord-r-3", user_id=owner.id, total_cents=2000)
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            user_repository=UserRepository(session),
+        )
 
         try:
             service.check_eligibility(
@@ -164,7 +211,11 @@ def test_create_request_manual_review_emits_handoff_contract() -> None:
         user = _create_user(session)
         order_repo = OrderRepository(session)
         order_repo.create(order_id="ord-r-5", user_id=user.id, total_cents=2800)
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            user_repository=UserRepository(session),
+        )
 
         response = service.create_request(
             user=user,
@@ -207,7 +258,11 @@ def test_list_user_refund_requests_returns_newest_first() -> None:
         order_repo.create(order_id="ord-r-6", user_id=user.id, total_cents=2000)
         order_repo.create(order_id="ord-r-7", user_id=user.id, total_cents=3000)
 
-        service = RefundService(order_repository=order_repo, refund_repository=RefundRepository(session))
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            user_repository=UserRepository(session),
+        )
         service.create_request(
             user=user,
             payload=RefundCreateRequest(
@@ -232,5 +287,35 @@ def test_list_user_refund_requests_returns_newest_first() -> None:
         assert [refund.order_id for refund in refunds] == ["ord-r-7", "ord-r-6"]
         assert refunds[0].reason_code == RefundReasonCode.QUALITY_ISSUE
         assert refunds[1].reason_code == RefundReasonCode.MISSING_ITEM
+    finally:
+        session.close()
+
+
+def test_create_request_credits_user_balance_for_auto_approved_refund() -> None:
+    session = build_session()
+    try:
+        user = _create_user(session)
+        starting_balance = user.balance_cents
+        order_repo = OrderRepository(session)
+        order_repo.create(order_id="ord-r-8", user_id=user.id, total_cents=2000)
+
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            user_repository=UserRepository(session),
+        )
+        response = service.create_request(
+            user=user,
+            payload=RefundCreateRequest(
+                order_id="ord-r-8",
+                reason_code=RefundReasonCode.MISSING_ITEM,
+                simulation_scenario_id="default",
+            ),
+            idempotency_key="idem-credit-1",
+        )
+
+        session.refresh(user)
+        assert response.status == RefundRequestStatus.SUBMITTED
+        assert user.balance_cents == starting_balance + 1000
     finally:
         session.close()

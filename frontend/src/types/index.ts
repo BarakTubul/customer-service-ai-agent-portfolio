@@ -43,6 +43,7 @@ export interface AccountMeResponse {
   account_status: string;
   is_admin: boolean;
   demo_card_last4?: string | null;
+  balance_cents?: number;
 }
 
 export interface DemoCardRevealResponse {
@@ -301,6 +302,7 @@ export interface CheckoutValidateResponse {
   subtotal_cents: number;
   delivery_fee_cents: number;
   total_cents: number;
+  available_balance_cents?: number | null;
   currency: string;
 }
 
@@ -330,6 +332,7 @@ export interface OrderCreateResponse {
   simulation_scenario_id?: string | null;
   currency: string;
   payment_authorization_id: string;
+  remaining_balance_cents?: number | null;
   idempotent_replay: boolean;
   created_at: string;
 }
