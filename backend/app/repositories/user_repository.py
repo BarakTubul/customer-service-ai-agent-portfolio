@@ -14,7 +14,7 @@ class UserRepository:
         self.db = db
 
     def create_guest(self) -> User:
-        user = User(is_guest=True, is_admin=False, is_active=True, is_verified=False)
+        user = User(is_guest=True, is_admin=False, is_active=True, is_verified=False, balance_cents=100000)
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
@@ -35,11 +35,42 @@ class UserRepository:
             is_admin=is_admin,
             is_active=True,
             is_verified=True,
+            balance_cents=100000,
         )
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def try_debit_balance(self, *, user_id: int, amount_cents: int) -> tuple[bool, int]:
+        user = self.get_by_id(user_id)
+        if user is None:
+            raise ValueError("User not found")
+        if amount_cents <= 0:
+            return True, user.balance_cents
+
+        available_balance = user.balance_cents or 0
+        if available_balance < amount_cents:
+            return False, available_balance
+
+        user.balance_cents = available_balance - amount_cents
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return True, user.balance_cents
+
+    def credit_balance(self, *, user_id: int, amount_cents: int) -> int:
+        user = self.get_by_id(user_id)
+        if user is None:
+            raise ValueError("User not found")
+        if amount_cents <= 0:
+            return user.balance_cents
+
+        user.balance_cents = (user.balance_cents or 0) + amount_cents
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user.balance_cents
 
     def update(self, user: User) -> User:
         self.db.add(user)

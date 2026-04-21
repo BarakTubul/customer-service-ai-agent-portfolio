@@ -10,6 +10,7 @@ from app.core.errors import ConflictError
 from app.models.user import User
 from app.repositories.order_repository import OrderRepository
 from app.repositories.refund_repository import RefundRepository
+from app.repositories.user_repository import UserRepository
 from app.services.refund_policy_engine import RefundPolicyEngine
 from app.schemas.refund import (
     ManualReviewDecision,
@@ -36,16 +37,22 @@ class RefundService:
         self,
         order_repository: OrderRepository,
         refund_repository: RefundRepository,
+        user_repository: UserRepository,
         refund_window_hours: int = 48,
     ) -> None:
         self.order_repository = order_repository
         self.refund_repository = refund_repository
+        self.user_repository = user_repository
         self.policy_engine = RefundPolicyEngine()
         self.refund_window_hours = max(1, refund_window_hours)
 
     def check_eligibility(self, *, user: User, payload: RefundEligibilityCheckRequest) -> RefundEligibilityCheckResponse:
         order = self._get_owned_order(user=user, order_id=payload.order_id)
-        simulated_state = self._simulate_order_state(order_id=order.order_id, scenario_id=payload.simulation_scenario_id)
+        simulated_state = self._simulate_order_state(
+            order_id=order.order_id,
+            scenario_id=payload.simulation_scenario_id,
+            payment_state=order.payment_state,
+        )
 
         decision = self.policy_engine.evaluate(
             reason_code=payload.reason_code,
@@ -165,6 +172,12 @@ class RefundService:
             ),
         )
 
+        if created.status == RefundRequestStatus.SUBMITTED:
+            self.user_repository.credit_balance(
+                user_id=created.user_id,
+                amount_cents=self._money_value_to_cents(created.refundable_amount_value),
+            )
+
         return RefundRequestResponse(
             refund_request_id=created.refund_request_id,
             order_id=created.order_id,
@@ -242,11 +255,20 @@ class RefundService:
         )
         if transitioned is None:
             raise ConflictError("Refund request cannot be decided in current state")
+        if transitioned.status == RefundRequestStatus.RESOLVED:
+            self.user_repository.credit_balance(
+                user_id=transitioned.user_id,
+                amount_cents=self._money_value_to_cents(transitioned.refundable_amount_value),
+            )
         return self._build_refund_response_from_row(transitioned)
 
     def get_order_state_sim(self, *, user: User, order_id: str, scenario_id: str) -> OrderStateSimResponse:
         order = self._get_owned_order(user=user, order_id=order_id)
-        simulated = self._simulate_order_state(order_id=order.order_id, scenario_id=scenario_id)
+        simulated = self._simulate_order_state(
+            order_id=order.order_id,
+            scenario_id=scenario_id,
+            payment_state=order.payment_state,
+        )
 
         now = order.updated_at.astimezone(UTC)
         timeline = [
@@ -278,20 +300,21 @@ class RefundService:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
     @staticmethod
-    def _simulate_order_state(*, order_id: str, scenario_id: str) -> dict[str, str]:
+    def _simulate_order_state(*, order_id: str, scenario_id: str, payment_state: str | None) -> dict[str, str]:
         key = hashlib.sha256(f"{order_id}:{scenario_id}".encode("utf-8")).hexdigest()
         bucket = int(key[:2], 16) % 3
+        resolved_payment_state = payment_state or "captured"
         if scenario_id == "delivered-happy":
-            return {"fulfillment_state": "delivered", "payment_state": "captured"}
+            return {"fulfillment_state": "delivered", "payment_state": resolved_payment_state}
         if scenario_id == "payment-pending":
             return {"fulfillment_state": "delivered", "payment_state": "pending"}
         if scenario_id == "expired-window":
-            return {"fulfillment_state": "delivered", "payment_state": "captured"}
+            return {"fulfillment_state": "delivered", "payment_state": resolved_payment_state}
         if bucket == 0:
-            return {"fulfillment_state": "delivered", "payment_state": "captured"}
+            return {"fulfillment_state": "delivered", "payment_state": resolved_payment_state}
         if bucket == 1:
-            return {"fulfillment_state": "in_transit", "payment_state": "captured"}
-        return {"fulfillment_state": "preparing", "payment_state": "authorized"}
+            return {"fulfillment_state": "in_transit", "payment_state": resolved_payment_state}
+        return {"fulfillment_state": "preparing", "payment_state": resolved_payment_state}
 
     @staticmethod
     def _serialize_explanation_params(params: dict[str, str | int | float | bool]) -> dict[str, str | int | float | bool]:
@@ -397,6 +420,12 @@ class RefundService:
             return 0.0
         computed_cents = round(order_total_cents * max(0.0, min(refund_ratio, 1.0)))
         return computed_cents / 100.0
+
+    @staticmethod
+    def _money_value_to_cents(value: float | None) -> int:
+        if value is None:
+            return 0
+        return max(0, round(value * 100))
 
     @staticmethod
     def _calculate_order_age_hours(order) -> float:

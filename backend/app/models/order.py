@@ -17,6 +17,7 @@ class Order(Base):
 
     status: Mapped[str] = mapped_column(String(64), nullable=False)
     status_label: Mapped[str] = mapped_column(String(128), nullable=False)
+    payment_state: Mapped[str] = mapped_column(String(32), default="captured", nullable=False)
     ordered_items_summary: Mapped[str | None] = mapped_column(String(512), nullable=True)
     total_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
