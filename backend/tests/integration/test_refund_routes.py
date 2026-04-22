@@ -135,6 +135,52 @@ def test_refund_second_request_for_same_order_is_blocked(client: TestClient, db_
     assert body["error"]["details"]["order_id"] == "ord-ref-repeat"
 
 
+def test_refund_history_supports_pagination_and_filters(client: TestClient, db_session: Session) -> None:
+    token = _register_and_get_token(client, "refund-history-page@example.com")
+    user_repo = UserRepository(db_session)
+    owner = user_repo.get_by_email("refund-history-page@example.com")
+    assert owner is not None
+
+    order_repo = OrderRepository(db_session)
+    _create_delivered_order(order_repo, order_id="ord-history-1", user_id=owner.id, total_cents=2500)
+    _create_delivered_order(order_repo, order_id="ord-history-2", user_id=owner.id, total_cents=2600)
+    _create_delivered_order(order_repo, order_id="ord-history-3", user_id=owner.id, total_cents=2700)
+
+    for index, order_id in enumerate(["ord-history-1", "ord-history-2", "ord-history-3"], start=1):
+        response = client.post(
+            "/api/v1/refunds/requests",
+            json={
+                "order_id": order_id,
+                "reason_code": "missing_item" if index != 2 else "late_delivery",
+                "simulation_scenario_id": "default",
+            },
+            headers={"Authorization": f"Bearer {token}", "Idempotency-Key": f"idem-history-{index}"},
+        )
+        assert response.status_code == 201
+
+    page_one = client.get(
+        "/api/v1/refunds/requests?limit=2&offset=0&q=ord-history",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert page_one.status_code == 200
+    body_one = page_one.json()
+    assert body_one["total"] == 3
+    assert body_one["limit"] == 2
+    assert body_one["offset"] == 0
+    assert len(body_one["items"]) == 2
+    assert all("ord-history" in item["order_id"] for item in body_one["items"])
+
+    filtered = client.get(
+        "/api/v1/refunds/requests?status=submitted&q=ord-history-1",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert filtered.status_code == 200
+    body_filtered = filtered.json()
+    assert body_filtered["total"] == 1
+    assert len(body_filtered["items"]) == 1
+    assert body_filtered["items"][0]["order_id"] == "ord-history-1"
+
+
 def test_guest_refund_actions_forbidden(client: TestClient, db_session: Session) -> None:
     owner_token = _register_and_get_token(client, "owner-for-guest-test@example.com")
     owner = UserRepository(db_session).get_by_email("owner-for-guest-test@example.com")

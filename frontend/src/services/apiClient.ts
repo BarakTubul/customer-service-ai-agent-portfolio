@@ -447,8 +447,20 @@ class APIClient {
     return response.data;
   }
 
-  async listUserRefundRequests(): Promise<t.RefundRequest[]> {
-    const response = await this.client.get<t.RefundRequest[]>('/refunds/requests');
+  async listUserRefundRequests(params?: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+    query?: string;
+  }): Promise<t.RefundRequestListResponse> {
+    const response = await this.client.get<t.RefundRequestListResponse>('/refunds/requests', {
+      params: {
+        limit: params?.limit,
+        offset: params?.offset,
+        status: params?.status,
+        q: params?.query,
+      },
+    });
     return response.data;
   }
 

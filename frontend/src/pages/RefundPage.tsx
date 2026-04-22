@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/services/apiClient';
 import { Button, Card, Alert } from '@/components/UI';
+import {
+  formatRefundDecisionLabel,
+  formatRefundEligibilitySummary,
+  formatRefundStatusLabel,
+} from '@/lib/refundCopy';
 import * as t from '@/types';
 
 export function RefundPage() {
@@ -125,16 +130,22 @@ export function RefundPage() {
         <div className="space-y-4">
           <Card className={eligibility.eligible ? 'bg-green-50' : 'bg-red-50'}>
             <h2 className="text-2xl font-bold mb-4">
-              {eligibility.eligible ? '✓ Eligible for Refund' : '✗ Not Eligible'}
+              {eligibility.eligible ? '✓ Refund can be requested' : '✗ Refund cannot be requested now'}
             </h2>
-            <p className="text-gray-700 mb-3">{eligibility.reason}</p>
+            <p className="text-gray-700 mb-3">
+              {formatRefundEligibilitySummary(
+                eligibility.eligible,
+                eligibility.reason,
+                eligibility.decision_reason_codes
+              )}
+            </p>
             {eligibility.decision_reason_codes.length > 0 && (
               <div>
-                <p className="font-semibold text-gray-700 mb-2">Reason Codes:</p>
+                <p className="font-semibold text-gray-700 mb-2">Why we reached this result:</p>
                 <ul className="list-disc pl-5 space-y-1">
                   {eligibility.decision_reason_codes.map((code) => (
                     <li key={code} className="text-gray-600">
-                      {code}
+                      {formatRefundDecisionLabel(code)}
                     </li>
                   ))}
                 </ul>
@@ -156,7 +167,7 @@ export function RefundPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Reason for Refund
+                    Tell us what went wrong
                   </label>
                   <select
                     value={reasonCode}
@@ -164,10 +175,10 @@ export function RefundPage() {
                     className="w-full border border-gray-300 rounded-md p-2"
                   >
                     <option value="">Select a reason...</option>
-                    <option value="item_defective">Item Defective</option>
-                    <option value="not_as_described">Not as Described</option>
-                    <option value="customer_requested">Customer Requested</option>
-                    <option value="damaged_in_shipping">Damaged in Shipping</option>
+                    <option value="item_defective">Item was defective</option>
+                    <option value="not_as_described">Item was not as described</option>
+                    <option value="customer_requested">I changed my mind</option>
+                    <option value="damaged_in_shipping">Item was damaged during shipping</option>
                   </select>
                 </div>
                 <Button
@@ -219,7 +230,7 @@ export function RefundPage() {
             </div>
             <div>
               <p className="font-semibold text-gray-700">Status:</p>
-              <p className="text-gray-900">{refundRequest.status}</p>
+              <p className="text-gray-900">{formatRefundStatusLabel(refundRequest.status)}</p>
             </div>
             <div>
               <p className="font-semibold text-gray-700">Submitted:</p>

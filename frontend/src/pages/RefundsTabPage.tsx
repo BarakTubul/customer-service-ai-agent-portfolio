@@ -1,9 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/services/apiClient';
 import { Alert, Button, Card } from '@/components/UI';
+import {
+  formatRefundDecisionLabel,
+  formatRefundReasonLabel,
+  formatRefundResolutionLabel,
+  formatRefundStatusLabel,
+} from '@/lib/refundCopy';
 import * as t from '@/types';
+
+const PAGE_SIZE = 8;
+
+const STATUS_FILTER_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'denied', label: 'Denied' },
+  { value: 'pending_manual_review', label: 'Waiting for review' },
+  { value: 'resolved', label: 'Resolved' },
+];
 
 function formatCreatedAt(value: string): string {
   return new Date(value).toLocaleString('en-US', {
@@ -20,10 +36,6 @@ function formatCents(cents: number, currency = 'USD'): string {
     style: 'currency',
     currency,
   }).format(cents / 100);
-}
-
-function formatLabel(value: string): string {
-  return value.replace(/_/g, ' ');
 }
 
 function getStatusBadgeColor(status: string): string {
@@ -51,19 +63,33 @@ export function RefundsTabPage() {
   const navigate = useNavigate();
   const { isGuest } = useAuth();
   const [refunds, setRefunds] = useState<t.RefundRequest[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [queryInput, setQueryInput] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedRefund, setExpandedRefund] = useState<string | null>(null);
 
   useEffect(() => {
     const loadRefunds = async () => {
+      setLoading(true);
       try {
         setError('');
         if (isGuest) {
           setRefunds([]);
+          setTotal(0);
         } else {
-          const data = await apiClient.listUserRefundRequests();
-          setRefunds(data);
+          const data = await apiClient.listUserRefundRequests({
+            limit: PAGE_SIZE,
+            offset: page * PAGE_SIZE,
+            status: statusFilter || undefined,
+            query: query || undefined,
+          });
+          setRefunds(data.items);
+          setTotal(data.total);
+          setExpandedRefund(null);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load refund requests');
@@ -73,7 +99,29 @@ export function RefundsTabPage() {
     };
 
     loadRefunds();
-  }, [isGuest]);
+  }, [isGuest, page, query, statusFilter]);
+
+  const totalPages = total > 0 ? Math.ceil(total / PAGE_SIZE) : 0;
+  const startItem = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const endItem = Math.min((page + 1) * PAGE_SIZE, total);
+
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPage(0);
+    setQuery(queryInput.trim());
+  };
+
+  const handleStatusChange = (value: string) => {
+    setPage(0);
+    setStatusFilter(value);
+  };
+
+  const handleClearFilters = () => {
+    setPage(0);
+    setQueryInput('');
+    setQuery('');
+    setStatusFilter('');
+  };
 
   if (loading) {
     return <div className="p-6 text-center text-gray-500">Loading refund requests...</div>;
@@ -102,15 +150,76 @@ export function RefundsTabPage() {
       <Card>
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Refund Applications</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Track all your refund applications and their current status.
+          Search and filter your refund applications without loading the full history at once.
         </p>
+
+        <form onSubmit={handleSearchSubmit} className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end mb-6">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor="refund-search">
+              Search
+            </label>
+            <input
+              id="refund-search"
+              value={queryInput}
+              onChange={(event) => setQueryInput(event.target.value)}
+              placeholder="Order ID, request ID, or reason"
+              className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor="refund-status-filter">
+              Status
+            </label>
+            <select
+              id="refund-status-filter"
+              value={statusFilter}
+              onChange={(event) => handleStatusChange(event.target.value)}
+              className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-2">
+            <Button type="submit" className="w-full" disabled={loading}>
+              Search
+            </Button>
+            <Button type="button" variant="outline" className="w-full" onClick={handleClearFilters} disabled={loading}>
+              Clear
+            </Button>
+          </div>
+        </form>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 text-sm text-gray-600">
+          <p>
+            Showing {startItem === 0 ? 0 : startItem}-{endItem} of {total} requests
+          </p>
+          <p>
+            Page {totalPages === 0 ? 0 : page + 1} of {totalPages}
+          </p>
+        </div>
 
         {refunds.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 mb-4">You haven't submitted any refund applications yet.</p>
-            <Button onClick={() => navigate('/orders')} variant="outline">
-              Go to Orders
-            </Button>
+            <p className="text-gray-500 mb-4">
+              {query || statusFilter
+                ? 'No refund applications match your current search or filter.'
+                : "You haven't submitted any refund applications yet."}
+            </p>
+            {query || statusFilter ? (
+              <Button onClick={handleClearFilters} variant="outline">
+                Clear filters
+              </Button>
+            ) : (
+              <Button onClick={() => navigate('/orders')} variant="outline">
+                Go to Orders
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -142,9 +251,7 @@ export function RefundsTabPage() {
                     <p className="text-sm text-gray-600">
                       Request ID: {refund.refund_request_id}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Submitted: {formatCreatedAt(refund.created_at)}
-                    </p>
+                    <p className="text-sm text-gray-500 mt-1">Submitted: {formatCreatedAt(refund.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {refund.refundable_amount && (
@@ -175,24 +282,28 @@ export function RefundsTabPage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <p className="text-xs font-semibold text-gray-500 uppercase">Reason for Refund</p>
-                        <p className="text-sm text-gray-900 mt-1">{formatLabel(refund.reason_code)}</p>
+                        <p className="text-sm text-gray-900 mt-1">
+                          {formatRefundReasonLabel(refund.reason_code)}
+                        </p>
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-gray-500 uppercase">Status</p>
-                        <p className="text-sm text-gray-900 mt-1">{formatLabel(refund.status)}</p>
+                        <p className="text-sm text-gray-900 mt-1">{formatRefundStatusLabel(refund.status)}</p>
                       </div>
                       {refund.status_reason && (
                         <div>
                           <p className="text-xs font-semibold text-gray-500 uppercase">Status Reason</p>
                           <p className="text-sm text-gray-900 mt-1">
-                            {formatLabel(refund.status_reason)}
+                            {formatRefundDecisionLabel(refund.status_reason)}
                           </p>
                         </div>
                       )}
                       {refund.resolution_action && (
                         <div>
                           <p className="text-xs font-semibold text-gray-500 uppercase">Resolution Action</p>
-                          <p className="text-sm text-gray-900 mt-1">{formatLabel(refund.resolution_action)}</p>
+                          <p className="text-sm text-gray-900 mt-1">
+                            {formatRefundResolutionLabel(refund.resolution_action)}
+                          </p>
                         </div>
                       )}
                       {refund.policy_version && (
@@ -220,7 +331,7 @@ export function RefundsTabPage() {
                               key={code}
                               className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
                             >
-                              {formatLabel(code)}
+                              {formatRefundDecisionLabel(code)}
                             </span>
                           ))}
                         </div>
@@ -257,6 +368,30 @@ export function RefundsTabPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPage((currentPage) => Math.max(0, currentPage - 1))}
+              disabled={page === 0 || loading}
+            >
+              Previous
+            </Button>
+            <p className="text-sm text-gray-600">
+              Page {page + 1} of {totalPages}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPage((currentPage) => Math.min(totalPages - 1, currentPage + 1))}
+              disabled={page >= totalPages - 1 || loading}
+            >
+              Next
+            </Button>
           </div>
         )}
       </Card>

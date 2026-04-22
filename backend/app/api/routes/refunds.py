@@ -14,7 +14,9 @@ from app.schemas.refund import (
     RefundEligibilityCheckRequest,
     RefundEligibilityCheckResponse,
     RefundReasonCode,
+    RefundRequestListResponse,
     RefundRequestResponse,
+    RefundRequestStatus,
 )
 from app.services.refund_service import RefundService
 
@@ -57,12 +59,16 @@ def get_refund_request(
     return refund_service.get_request(user=current_user, refund_request_id=refund_request_id)
 
 
-@router.get("/refunds/requests", response_model=list[RefundRequestResponse])
+@router.get("/refunds/requests", response_model=RefundRequestListResponse)
 def list_user_refund_requests(
+    limit: int = Query(default=10, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    status: RefundRequestStatus | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=100),
     current_user: User = Depends(get_current_user),
     refund_service: RefundService = Depends(get_refund_service),
-) -> list[RefundRequestResponse]:
-    return refund_service.list_user_requests(user=current_user)
+) -> RefundRequestListResponse:
+    return refund_service.list_user_requests(user=current_user, limit=limit, offset=offset, status=status, query=q)
 
 
 @router.get("/orders/{order_id}/state-sim", response_model=OrderStateSimResponse)

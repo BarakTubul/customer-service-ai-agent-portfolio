@@ -286,9 +286,12 @@ def test_list_user_requests_normalizes_legacy_chat_refund_values() -> None:
 
         rows = service.list_user_requests(user=user)
 
-        assert len(rows) == 1
-        assert rows[0].reason_code == RefundReasonCode.OTHER
-        assert rows[0].decision_reason_codes == [RefundDecisionReasonCode.REASON_CODE_NOT_SUPPORTED]
-        assert rows[0].policy_version == RefundPolicyVersion.V1
+        assert rows.total == 1
+        assert rows.limit == 10
+        assert rows.offset == 0
+        assert len(rows.items) == 1
+        assert rows.items[0].reason_code == RefundReasonCode.OTHER
+        assert rows.items[0].decision_reason_codes == [RefundDecisionReasonCode.REASON_CODE_NOT_SUPPORTED]
+        assert rows.items[0].policy_version == RefundPolicyVersion.V1
     finally:
         session.close()

@@ -171,6 +171,15 @@ export interface RefundEligibilityResponse {
   decision_reason_codes: string[];
 }
 
+export interface RefundRequestListResponse {
+  items: RefundRequest[];
+  total: number;
+  limit: number;
+  offset: number;
+  status_filter?: string | null;
+  query?: string | null;
+}
+
 export interface RefundRequest {
   refund_request_id: string;
   order_id: string;

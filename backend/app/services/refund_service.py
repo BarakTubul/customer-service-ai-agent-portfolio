@@ -28,6 +28,7 @@ from app.schemas.refund import (
     RefundEligibilityCheckResponse,
     RefundPolicyVersion,
     RefundReasonCode,
+    RefundRequestListResponse,
     RefundRequestStatus,
     RefundResolutionAction,
     RefundRequestResponse,
@@ -224,10 +225,32 @@ class RefundService:
 
         return self._build_refund_response_from_row(row)
 
-    def list_user_requests(self, *, user: User, limit: int = 100) -> list[RefundRequestResponse]:
-        """List all refund requests for the current user."""
-        rows = self.refund_repository.list_by_user_id(user_id=user.id, limit=limit)
-        return [self._build_refund_response_from_row(row) for row in rows]
+    def list_user_requests(
+        self,
+        *,
+        user: User,
+        limit: int = 10,
+        offset: int = 0,
+        status: str | None = None,
+        query: str | None = None,
+    ) -> RefundRequestListResponse:
+        """List refund requests for the current user with pagination and filtering."""
+        rows = self.refund_repository.list_by_user_id(
+            user_id=user.id,
+            limit=limit,
+            offset=offset,
+            status=status,
+            query=query,
+        )
+        total = self.refund_repository.count_by_user_id(user_id=user.id, status=status, query=query)
+        return RefundRequestListResponse(
+            items=[self._build_refund_response_from_row(row) for row in rows],
+            total=total,
+            limit=max(1, min(limit, 50)),
+            offset=max(0, offset),
+            status_filter=status,
+            query=query.strip() if query and query.strip() else None,
+        )
 
     def list_manual_review_queue(
         self,
