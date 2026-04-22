@@ -54,9 +54,8 @@ def get_account_order_service(
 
 def get_order_placement_service(
     order_repository: OrderRepository = Depends(get_order_repository),
-    user_repository: UserRepository = Depends(get_user_repository),
 ) -> OrderPlacementService:
-    return OrderPlacementService(order_repository, user_repository)
+    return OrderPlacementService(order_repository)
 
 def get_refund_repository(db: Session = Depends(get_db)) -> RefundRepository:
     return RefundRepository(db)
@@ -81,14 +80,12 @@ def get_notification_service(
 def get_refund_service(
     order_repository: OrderRepository = Depends(get_order_repository),
     refund_repository: RefundRepository = Depends(get_refund_repository),
-    user_repository: UserRepository = Depends(get_user_repository),
+    account_order_service: AccountOrderService = Depends(get_account_order_service),
 ) -> RefundService:
-    settings = get_settings()
     return RefundService(
         order_repository=order_repository,
         refund_repository=refund_repository,
-        user_repository=user_repository,
-        refund_window_hours=settings.refund_window_hours,
+        account_order_service=account_order_service,
     )
 
 

@@ -176,6 +176,11 @@ export interface RefundRequest {
   order_id: string;
   status: string;
   status_reason?: string;
+  reason_code: string;
+  decision_reason_codes?: string[];
+  resolution_action?: string | null;
+  policy_version?: string | null;
+  refundable_amount?: { currency: string; value: number } | null;
   manual_review_handoff?: ManualReviewHandoff | null;
   idempotent_replay: boolean;
   created_at: string;
@@ -314,6 +319,7 @@ export interface OrderCreateResponse {
   status: string;
   status_label: string;
   total_cents: number;
+  remaining_balance_cents: number;
   simulation_scenario_id?: string | null;
   currency: string;
   payment_authorization_id: string;

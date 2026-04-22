@@ -25,10 +25,6 @@ class RefundRepository:
         stmt = select(RefundRequest).where(RefundRequest.idempotency_key == idempotency_key)
         return self.db.scalar(stmt)
 
-    def list_by_user_id(self, *, user_id: int) -> list[RefundRequest]:
-        stmt = select(RefundRequest).where(RefundRequest.user_id == user_id).order_by(RefundRequest.created_at.desc())
-        return list(self.db.scalars(stmt).all())
-
     def create(
         self,
         *,
@@ -102,6 +98,17 @@ class RefundRepository:
             stmt = stmt.where(RefundRequest.escalation_sla_deadline_at <= before_sla)
         stmt = stmt.order_by(RefundRequest.escalation_sla_deadline_at.asc(), RefundRequest.created_at.asc()).limit(
             bounded_limit
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def list_by_user_id(self, user_id: int, limit: int = 100) -> list[RefundRequest]:
+        """List all refund requests for a specific user, ordered by creation date (newest first)."""
+        bounded_limit = max(1, min(limit, 500))
+        stmt = (
+            select(RefundRequest)
+            .where(RefundRequest.user_id == user_id)
+            .order_by(RefundRequest.created_at.desc())
+            .limit(bounded_limit)
         )
         return list(self.db.scalars(stmt).all())
 

@@ -19,6 +19,7 @@ class RefundReasonCode(str, Enum):
 class RefundDecisionReasonCode(str, Enum):
     ELIGIBLE = "eligible"
     ELIGIBLE_PARTIAL = "eligible_partial"
+    OUTCOME_MISMATCH = "outcome_mismatch"
     PAYMENT_NOT_CAPTURED = "payment_not_captured"
     REFUND_WINDOW_EXPIRED = "refund_window_expired"
     NON_REFUNDABLE_ITEM = "non_refundable_item"
@@ -66,7 +67,7 @@ class RefundEligibilityCheckRequest(BaseModel):
     order_id: str
     reason_code: RefundReasonCode
     item_selections: list[ItemSelection] = []
-    simulation_scenario_id: str = "default"
+    simulation_scenario_id: str | None = None
 
 
 class MoneyAmount(BaseModel):
@@ -90,7 +91,7 @@ class RefundCreateRequest(BaseModel):
     order_id: str
     reason_code: RefundReasonCode
     item_selections: list[ItemSelection] = []
-    simulation_scenario_id: str = "default"
+    simulation_scenario_id: str | None = None
 
 class ManualReviewHandoff(BaseModel):
     escalation_status: ManualReviewEscalationStatus
@@ -125,18 +126,14 @@ class ManualReviewDecisionRequest(BaseModel):
 class RefundRequestResponse(BaseModel):
     refund_request_id: str
     order_id: str
-    reason_code: RefundReasonCode
     status: RefundRequestStatus
     status_reason: str | None
-    manual_review_handoff: ManualReviewHandoff | None = None
+    reason_code: RefundReasonCode
     decision_reason_codes: list[RefundDecisionReasonCode] = []
-    policy_version: RefundPolicyVersion | None = None
-    policy_reference: str | None = None
     resolution_action: RefundResolutionAction | None = None
-    refundable_amount_currency: str | None = None
-    refundable_amount_value: float | None = None
-    explanation_template_key: str | None = None
-    explanation_params: dict[str, str | int | float | bool] | None = None
+    policy_version: RefundPolicyVersion | None = None
+    refundable_amount: MoneyAmount | None = None
+    manual_review_handoff: ManualReviewHandoff | None = None
     created_at: datetime
     idempotent_replay: bool = False
 
@@ -146,4 +143,9 @@ class OrderStateSimResponse(BaseModel):
     simulation_scenario_id: str
     fulfillment_state: str
     payment_state: str
+    ordered_items_summary: str | None = None
+    received_items_summary: str | None = None
+    is_delayed: bool
+    eta_to: datetime | None = None
+    delivered_at: datetime | None = None
     state_timeline: list[dict[str, str]]

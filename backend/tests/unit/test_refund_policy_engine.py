@@ -16,6 +16,8 @@ def test_policy_engine_is_deterministic_for_same_input() -> None:
         simulation_scenario_id="default",
         fulfillment_state="delivered",
         payment_state="captured",
+        issue_code="late_delivery",
+        is_delayed=True,
         refund_window_hours=48,
         order_age_hours=2.0,
     )
@@ -24,6 +26,8 @@ def test_policy_engine_is_deterministic_for_same_input() -> None:
         simulation_scenario_id="default",
         fulfillment_state="delivered",
         payment_state="captured",
+        issue_code="late_delivery",
+        is_delayed=True,
         refund_window_hours=48,
         order_age_hours=2.0,
     )
@@ -39,6 +43,8 @@ def test_policy_engine_denies_non_refundable_scenario() -> None:
         simulation_scenario_id="non-refundable",
         fulfillment_state="delivered",
         payment_state="captured",
+        issue_code="quality_issue",
+        is_delayed=False,
         refund_window_hours=48,
         order_age_hours=1.0,
     )
@@ -59,6 +65,8 @@ def test_policy_engine_partial_for_missing_item() -> None:
         simulation_scenario_id="default",
         fulfillment_state="delivered",
         payment_state="captured",
+        issue_code="missing_item",
+        is_delayed=False,
         refund_window_hours=48,
         order_age_hours=3.0,
     )
@@ -80,6 +88,8 @@ def test_policy_engine_emits_policy_version_v1() -> None:
         simulation_scenario_id="default",
         fulfillment_state="delivered",
         payment_state="captured",
+        issue_code="late_delivery",
+        is_delayed=True,
         refund_window_hours=48,
         order_age_hours=4.0,
     )
@@ -95,6 +105,8 @@ def test_policy_engine_denies_when_order_age_exceeds_refund_window() -> None:
         simulation_scenario_id="default",
         fulfillment_state="delivered",
         payment_state="captured",
+        issue_code="late_delivery",
+        is_delayed=True,
         refund_window_hours=24,
         order_age_hours=49.0,
     )
@@ -103,3 +115,23 @@ def test_policy_engine_denies_when_order_age_exceeds_refund_window() -> None:
     assert decision.resolution_action == RefundResolutionAction.DENY
     assert decision.decision_reason_codes == [RefundDecisionReasonCode.REFUND_WINDOW_EXPIRED]
     assert decision.explanation_template_key == "refund.refund_window_expired"
+
+
+def test_policy_engine_denies_when_reason_does_not_match_outcome() -> None:
+    engine = RefundPolicyEngine()
+
+    decision = engine.evaluate(
+        reason_code="missing_item",
+        simulation_scenario_id="default",
+        fulfillment_state="delivered",
+        payment_state="captured",
+        issue_code="wrong_item",
+        is_delayed=False,
+        refund_window_hours=48,
+        order_age_hours=2.0,
+    )
+
+    assert decision.eligible is False
+    assert decision.resolution_action == RefundResolutionAction.DENY
+    assert decision.decision_reason_codes == [RefundDecisionReasonCode.OUTCOME_MISMATCH]
+    assert decision.explanation_template_key == "refund.outcome_mismatch"

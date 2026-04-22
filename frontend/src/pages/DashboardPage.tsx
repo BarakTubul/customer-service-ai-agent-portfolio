@@ -94,12 +94,6 @@ export function DashboardPage() {
           <p className="text-gray-700">
             <span className="font-semibold">Email:</span> {accountInfo?.masked_email}
           </p>
-          {!isGuest && (
-            <p className="text-gray-700">
-              <span className="font-semibold">Available balance:</span>{' '}
-              {formatCents(accountInfo?.balance_cents)}
-            </p>
-          )}
           <p className="text-gray-700">
             <span className="font-semibold">Status:</span>{' '}
             {isGuest ? (
@@ -130,9 +124,6 @@ export function DashboardPage() {
             <div className="rounded-md border border-slate-200 bg-slate-50 p-4 space-y-3 max-w-md">
               <p className="text-sm text-slate-900 font-semibold">Wallet is locked</p>
               <p className="text-xs text-slate-600">Enter your account password to view card and balance.</p>
-              <p className="text-sm text-slate-700">
-                Balance on file: <span className="font-semibold">{formatCents(accountInfo?.balance_cents)}</span>
-              </p>
               <Input
                 label="Wallet password"
                 type="password"
