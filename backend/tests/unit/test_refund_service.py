@@ -251,3 +251,44 @@ def test_create_request_manual_review_emits_handoff_contract() -> None:
         assert replay.manual_review_handoff.escalation_status == "queued"
     finally:
         session.close()
+
+
+def test_list_user_requests_normalizes_legacy_chat_refund_values() -> None:
+    session = build_session()
+    try:
+        user = _create_user(session)
+        order_repo = OrderRepository(session)
+        _create_delivered_order(order_repo, order_id="ord-r-legacy-chat", user_id=user.id, total_cents=2500)
+
+        refund_repo = RefundRepository(session)
+        refund_repo.create(
+            refund_request_id="legacy-chat-1",
+            idempotency_key="legacy-chat-idem",
+            user_id=user.id,
+            order_id="ord-r-legacy-chat",
+            reason_code="chat_human_assistance",
+            simulation_scenario_id="chat",
+            status="submitted",
+            status_reason=None,
+            policy_version="chat",
+            policy_reference="legacy-chat-policy",
+            resolution_action="approve_partial",
+            decision_reason_codes="chat_escalation",
+            refundable_amount_currency="USD",
+            refundable_amount_value=5.0,
+        )
+
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=refund_repo,
+            account_order_service=AccountOrderService(order_repo, UserRepository(session)),
+        )
+
+        rows = service.list_user_requests(user=user)
+
+        assert len(rows) == 1
+        assert rows[0].reason_code == RefundReasonCode.OTHER
+        assert rows[0].decision_reason_codes == [RefundDecisionReasonCode.REASON_CODE_NOT_SUPPORTED]
+        assert rows[0].policy_version == RefundPolicyVersion.V1
+    finally:
+        session.close()

@@ -37,8 +37,19 @@ function formatAxiosError(error: unknown): string {
   }
 
   const status = error.response?.status;
-  const data = error.response?.data as { detail?: unknown; message?: unknown } | undefined;
-  const detailMessage = stringifyErrorDetail(data?.detail ?? data?.message);
+  const data = error.response?.data as
+    | {
+        detail?: unknown;
+        message?: unknown;
+        error?: {
+          message?: unknown;
+          details?: unknown;
+        };
+      }
+    | undefined;
+  const detailMessage = stringifyErrorDetail(
+    data?.detail ?? data?.message ?? data?.error?.message ?? data?.error?.details
+  );
 
   if (status && status >= 400 && status < 500) {
     return detailMessage

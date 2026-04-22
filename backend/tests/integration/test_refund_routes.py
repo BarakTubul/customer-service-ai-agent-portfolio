@@ -100,6 +100,41 @@ def test_refund_create_idempotent_replay_returns_200(client: TestClient, db_sess
     assert second.json()["idempotent_replay"] is True
 
 
+def test_refund_second_request_for_same_order_is_blocked(client: TestClient, db_session: Session) -> None:
+    token = _register_and_get_token(client, "refund-repeat@example.com")
+    user_repo = UserRepository(db_session)
+    owner = user_repo.get_by_email("refund-repeat@example.com")
+    assert owner is not None
+    _create_delivered_order(OrderRepository(db_session), order_id="ord-ref-repeat", user_id=owner.id, total_cents=3000)
+
+    first = client.post(
+        "/api/v1/refunds/requests",
+        json={
+            "order_id": "ord-ref-repeat",
+            "reason_code": "missing_item",
+            "simulation_scenario_id": "default",
+        },
+        headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "idem-repeat-1"},
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        "/api/v1/refunds/requests",
+        json={
+            "order_id": "ord-ref-repeat",
+            "reason_code": "missing_item",
+            "simulation_scenario_id": "default",
+        },
+        headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "idem-repeat-2"},
+    )
+
+    assert second.status_code == 409
+    body = second.json()
+    assert body["error"]["message"] == "Refund already requested for this order"
+    assert body["error"]["details"]["conflict_type"] == "duplicate_refund_request"
+    assert body["error"]["details"]["order_id"] == "ord-ref-repeat"
+
+
 def test_guest_refund_actions_forbidden(client: TestClient, db_session: Session) -> None:
     owner_token = _register_and_get_token(client, "owner-for-guest-test@example.com")
     owner = UserRepository(db_session).get_by_email("owner-for-guest-test@example.com")

@@ -16,6 +16,7 @@ from app.services.account_order_service import AccountOrderService
 from app.services.refund_policy_engine import RefundPolicyEngine
 from app.schemas.refund import (
     ManualReviewDecision,
+    RefundDecisionReasonCode,
     ManualReviewEscalationStatus,
     ManualReviewHandoff,
     ManualReviewQueueItem,
@@ -25,6 +26,8 @@ from app.schemas.refund import (
     RefundCreateRequest,
     RefundEligibilityCheckRequest,
     RefundEligibilityCheckResponse,
+    RefundPolicyVersion,
+    RefundReasonCode,
     RefundRequestStatus,
     RefundResolutionAction,
     RefundRequestResponse,
@@ -98,6 +101,7 @@ class RefundService:
         idempotency_key: str | None,
     ) -> RefundRequestResponse:
         order = self._get_owned_order(user=user, order_id=payload.order_id)
+
         stable_key = idempotency_key or self._build_idempotency_key(
             user_id=user.id,
             order_id=payload.order_id,
@@ -106,30 +110,17 @@ class RefundService:
 
         existing = self.refund_repository.get_by_idempotency_key(stable_key)
         if existing is not None:
-            return RefundRequestResponse(
-                refund_request_id=existing.refund_request_id,
-                order_id=existing.order_id,
-                status=existing.status,
-                status_reason=existing.status_reason,
-                reason_code=existing.reason_code,
-                decision_reason_codes=[
-                    code
-                    for code in (existing.decision_reason_codes or "").split(",")
-                    if code
-                ],
-                resolution_action=existing.resolution_action,
-                policy_version=existing.policy_version,
-                refundable_amount=(
-                    MoneyAmount(
-                        currency=existing.refundable_amount_currency,
-                        value=existing.refundable_amount_value,
-                    )
-                    if existing.refundable_amount_currency is not None and existing.refundable_amount_value is not None
-                    else None
-                ),
-                manual_review_handoff=self._build_manual_review_handoff_from_row(existing),
-                created_at=existing.created_at,
-                idempotent_replay=True,
+            replay_response = self._build_refund_response_from_row(existing)
+            return replay_response.model_copy(update={"idempotent_replay": True})
+
+        existing_order_refunds = self.refund_repository.list_by_order_id(order.order_id)
+        if existing_order_refunds:
+            raise ConflictError(
+                "Refund already requested for this order",
+                details={
+                    "conflict_type": "duplicate_refund_request",
+                    "order_id": order.order_id,
+                },
             )
 
         order_state = self._build_order_state_snapshot(user=user, order=order)
@@ -222,31 +213,7 @@ class RefundService:
                 amount_cents=round(created.refundable_amount_value * 100),
             )
 
-        return RefundRequestResponse(
-            refund_request_id=created.refund_request_id,
-            order_id=created.order_id,
-            status=created.status,
-            status_reason=created.status_reason,
-            reason_code=created.reason_code,
-            decision_reason_codes=[
-                code
-                for code in (created.decision_reason_codes or "").split(",")
-                if code
-            ],
-            resolution_action=created.resolution_action,
-            policy_version=created.policy_version,
-            refundable_amount=(
-                MoneyAmount(
-                    currency=created.refundable_amount_currency,
-                    value=created.refundable_amount_value,
-                )
-                if created.refundable_amount_currency is not None and created.refundable_amount_value is not None
-                else None
-            ),
-            manual_review_handoff=manual_review_handoff,
-            created_at=created.created_at,
-            idempotent_replay=False,
-        )
+        return self._build_refund_response_from_row(created)
 
     def get_request(self, *, user: User, refund_request_id: str) -> RefundRequestResponse:
         row = self.refund_repository.get_by_refund_request_id(refund_request_id)
@@ -282,7 +249,16 @@ class RefundService:
             actor_admin_user_id=admin_user_id,
         )
         if transitioned is None:
-            raise ConflictError("Refund request cannot be claimed in current state")
+            raise ConflictError(
+                "Refund request cannot be claimed in current state",
+                details={
+                    "conflict_type": "invalid_manual_review_transition",
+                    "refund_request_id": refund_request_id,
+                    "attempted_status": ManualReviewEscalationStatus.IN_REVIEW.value,
+                    "current_status": row.escalation_status,
+                    "allowed_from_statuses": [ManualReviewEscalationStatus.QUEUED.value],
+                },
+            )
         return self._build_refund_response_from_row(transitioned)
 
     def decide_manual_review_request(
@@ -303,7 +279,16 @@ class RefundService:
             reviewer_note=reviewer_note,
         )
         if transitioned is None:
-            raise ConflictError("Refund request cannot be decided in current state")
+            raise ConflictError(
+                "Refund request cannot be decided in current state",
+                details={
+                    "conflict_type": "invalid_manual_review_transition",
+                    "refund_request_id": refund_request_id,
+                    "attempted_status": decision.value,
+                    "current_status": row.escalation_status,
+                    "allowed_from_statuses": [ManualReviewEscalationStatus.IN_REVIEW.value],
+                },
+            )
 
         # Manual-review approved refunds are credited on resolve.
         if (
@@ -523,19 +508,20 @@ class RefundService:
         )
 
     def _build_refund_response_from_row(self, row) -> RefundRequestResponse:
+        reason_code = self._normalize_reason_code(row.reason_code)
+        decision_reason_codes = self._normalize_decision_reason_codes(row.decision_reason_codes)
+        resolution_action = self._normalize_resolution_action(row.resolution_action)
+        policy_version = self._normalize_policy_version(row.policy_version)
+
         return RefundRequestResponse(
             refund_request_id=row.refund_request_id,
             order_id=row.order_id,
             status=row.status,
             status_reason=row.status_reason,
-            reason_code=row.reason_code,
-            decision_reason_codes=[
-                code
-                for code in (row.decision_reason_codes or "").split(",")
-                if code
-            ],
-            resolution_action=row.resolution_action,
-            policy_version=row.policy_version,
+            reason_code=reason_code,
+            decision_reason_codes=decision_reason_codes,
+            resolution_action=resolution_action,
+            policy_version=policy_version,
             refundable_amount=(
                 MoneyAmount(currency=row.refundable_amount_currency, value=row.refundable_amount_value)
                 if row.refundable_amount_currency is not None and row.refundable_amount_value is not None
@@ -545,6 +531,44 @@ class RefundService:
             created_at=row.created_at,
             idempotent_replay=False,
         )
+
+    @staticmethod
+    def _normalize_reason_code(reason_code: str | None) -> str:
+        if reason_code in RefundReasonCode._value2member_map_:
+            return str(reason_code)
+        return RefundReasonCode.OTHER.value
+
+    @staticmethod
+    def _normalize_decision_reason_codes(decision_reason_codes: str | None) -> list[str]:
+        normalized: list[str] = []
+        for code in (decision_reason_codes or "").split(","):
+            stripped = code.strip()
+            if not stripped:
+                continue
+            if stripped in RefundDecisionReasonCode._value2member_map_:
+                normalized.append(stripped)
+                continue
+            normalized.append(RefundDecisionReasonCode.REASON_CODE_NOT_SUPPORTED.value)
+
+        if not normalized:
+            return [RefundDecisionReasonCode.REASON_CODE_NOT_SUPPORTED.value]
+        return normalized
+
+    @staticmethod
+    def _normalize_resolution_action(resolution_action: str | None) -> str | None:
+        if resolution_action is None:
+            return None
+        if resolution_action in RefundResolutionAction._value2member_map_:
+            return str(resolution_action)
+        return None
+
+    @staticmethod
+    def _normalize_policy_version(policy_version: str | None) -> str | None:
+        if policy_version is None:
+            return None
+        if policy_version in RefundPolicyVersion._value2member_map_:
+            return str(policy_version)
+        return RefundPolicyVersion.V1.value
 
     @staticmethod
     def _serialize_scalar(value: str | int | float | bool | Enum) -> str | int | float | bool:

@@ -112,6 +112,17 @@ class RefundRepository:
         )
         return list(self.db.scalars(stmt).all())
 
+    def list_by_order_id(self, order_id: str, limit: int = 100) -> list[RefundRequest]:
+        """List refund requests for an order, newest first."""
+        bounded_limit = max(1, min(limit, 500))
+        stmt = (
+            select(RefundRequest)
+            .where(RefundRequest.order_id == order_id)
+            .order_by(RefundRequest.created_at.desc())
+            .limit(bounded_limit)
+        )
+        return list(self.db.scalars(stmt).all())
+
     def transition_escalation_status(
         self,
         *,
