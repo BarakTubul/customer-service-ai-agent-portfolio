@@ -9,6 +9,7 @@ const REFUND_REASON_LABELS: Record<string, string> = {
 };
 
 const REFUND_STATUS_LABELS: Record<string, string> = {
+  approved: 'Approved',
   submitted: 'Submitted',
   denied: 'Denied',
   pending_manual_review: 'Waiting for review',

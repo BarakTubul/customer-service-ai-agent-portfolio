@@ -15,6 +15,7 @@ const PAGE_SIZE = 8;
 
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: 'All statuses' },
+  { value: 'approved', label: 'Approved' },
   { value: 'submitted', label: 'Submitted' },
   { value: 'denied', label: 'Denied' },
   { value: 'pending_manual_review', label: 'Waiting for review' },

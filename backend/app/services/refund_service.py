@@ -162,7 +162,7 @@ class RefundService:
             eligibility=eligibility,
         )
 
-        status = RefundRequestStatus.SUBMITTED if eligibility.eligible else RefundRequestStatus.DENIED
+        status = RefundRequestStatus.APPROVED if eligibility.eligible else RefundRequestStatus.DENIED
         if manual_review_handoff is not None:
             status = RefundRequestStatus.PENDING_MANUAL_REVIEW
         status_reason = None if eligibility.eligible else ",".join(eligibility.decision_reason_codes)

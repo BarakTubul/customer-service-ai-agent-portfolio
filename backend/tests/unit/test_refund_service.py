@@ -177,6 +177,37 @@ def test_create_request_idempotent_replay() -> None:
         session.close()
 
 
+def test_create_request_auto_granted_refund_is_approved() -> None:
+    session = build_session()
+    try:
+        user = _create_user(session)
+        order_repo = OrderRepository(session)
+        order_id = _order_id_for_scenario("ord-r-approved", "missing_item")
+        _create_delivered_order(order_repo, order_id=order_id, user_id=user.id, total_cents=3000)
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=RefundRepository(session),
+            account_order_service=AccountOrderService(order_repo, UserRepository(session)),
+        )
+
+        response = service.create_request(
+            user=user,
+            payload=RefundCreateRequest(
+                order_id=order_id,
+                reason_code=RefundReasonCode.MISSING_ITEM,
+                simulation_scenario_id="default",
+            ),
+            idempotency_key="idem-approved-1",
+        )
+
+        assert response.status == "approved"
+        stored = service.refund_repository.get_by_refund_request_id(response.refund_request_id)
+        assert stored is not None
+        assert stored.status == "approved"
+    finally:
+        session.close()
+
+
 def test_guest_cannot_submit_refund() -> None:
     session = build_session()
     try:

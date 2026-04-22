@@ -40,6 +40,7 @@ class RefundResolutionAction(str, Enum):
 
 
 class RefundRequestStatus(str, Enum):
+    APPROVED = "approved"
     SUBMITTED = "submitted"
     DENIED = "denied"
     PENDING_MANUAL_REVIEW = "pending_manual_review"
