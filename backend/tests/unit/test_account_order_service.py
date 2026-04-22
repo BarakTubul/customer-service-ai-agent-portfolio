@@ -93,6 +93,7 @@ def test_account_profile_includes_demo_card() -> None:
 
         assert profile.demo_card_last4 is not None
         assert len(profile.demo_card_last4) == 4
+        assert profile.balance_cents == 100000
     finally:
         session.close()
 

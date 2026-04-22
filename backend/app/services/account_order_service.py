@@ -53,7 +53,7 @@ class AccountOrderService:
             account_status=status,
             is_admin=user.is_admin,
             demo_card_last4=self._card_last4(user.demo_card_number),
-            balance_cents=user.balance_cents or 0,
+            balance_cents=user.balance_cents,
         )
 
     def reveal_demo_card(self, *, user: User, password: str) -> DemoCardRevealResponse:
@@ -97,7 +97,6 @@ class AccountOrderService:
             order_id=order.order_id,
             status=order.status,
             status_label=order.status_label,
-            payment_state=order.payment_state,
             ordered_items_summary=order.ordered_items_summary,
             total_cents=order.total_cents or 0,
             created_at=order.created_at,
