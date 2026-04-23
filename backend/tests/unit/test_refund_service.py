@@ -354,6 +354,41 @@ def test_list_user_refunds_normalizes_legacy_decision_reason_codes() -> None:
         session.close()
 
 
+def test_list_user_refunds_normalizes_legacy_reason_code_and_policy_version() -> None:
+    session = build_session()
+    try:
+        user = _create_user(session)
+        order_repo = OrderRepository(session)
+        order_repo.create(order_id="ord-r-legacy-2", user_id=user.id, total_cents=1800)
+
+        refund_repo = RefundRepository(session)
+        refund_repo.create(
+            refund_request_id="legacy_refund_2",
+            idempotency_key="legacy_idem_2",
+            user_id=user.id,
+            order_id="ord-r-legacy-2",
+            reason_code="chat_human_assistance",
+            simulation_scenario_id="default",
+            status=RefundRequestStatus.DENIED,
+            status_reason="legacy",
+            policy_version="chat",
+            decision_reason_codes="outcome_mismatch",
+        )
+
+        service = RefundService(
+            order_repository=order_repo,
+            refund_repository=refund_repo,
+            user_repository=UserRepository(session),
+        )
+        refunds = service.list_user_refund_requests(user=user)
+
+        assert len(refunds) == 1
+        assert refunds[0].reason_code == RefundReasonCode.OTHER
+        assert refunds[0].policy_version is None
+    finally:
+        session.close()
+
+
 def test_eligibility_default_scenario_treats_received_order_as_delivered() -> None:
     session = build_session()
     try:

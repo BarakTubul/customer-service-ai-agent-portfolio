@@ -24,6 +24,8 @@ from app.schemas.refund import (
     RefundCreateRequest,
     RefundEligibilityCheckRequest,
     RefundEligibilityCheckResponse,
+    RefundPolicyVersion,
+    RefundReasonCode,
     RefundRequestStatus,
     RefundResolutionAction,
     RefundRequestResponse,
@@ -36,6 +38,8 @@ class RefundService:
     _LEGACY_REASON_CODE_MAP: dict[str, str] = {
         "outcome_mismatch": RefundDecisionReasonCode.REASON_CODE_NOT_SUPPORTED.value,
     }
+    _VALID_REFUND_REASON_CODES: set[str] = {code.value for code in RefundReasonCode}
+    _VALID_POLICY_VERSIONS: set[str] = {code.value for code in RefundPolicyVersion}
 
     def __init__(
         self,
@@ -103,12 +107,12 @@ class RefundService:
             return RefundRequestResponse(
                 refund_request_id=existing.refund_request_id,
                 order_id=existing.order_id,
-                reason_code=existing.reason_code,
+                reason_code=self._normalize_refund_reason_code(existing.reason_code),
                 status=existing.status,
                 status_reason=existing.status_reason,
                 manual_review_handoff=self._build_manual_review_handoff_from_row(existing),
                 decision_reason_codes=self._parse_decision_reason_codes(existing.decision_reason_codes),
-                policy_version=existing.policy_version,
+                policy_version=self._normalize_policy_version(existing.policy_version),
                 policy_reference=existing.policy_reference,
                 resolution_action=existing.resolution_action,
                 refundable_amount_currency=existing.refundable_amount_currency,
@@ -185,12 +189,12 @@ class RefundService:
         return RefundRequestResponse(
             refund_request_id=created.refund_request_id,
             order_id=created.order_id,
-            reason_code=created.reason_code,
+            reason_code=self._normalize_refund_reason_code(created.reason_code),
             status=created.status,
             status_reason=created.status_reason,
             manual_review_handoff=manual_review_handoff,
             decision_reason_codes=self._parse_decision_reason_codes(created.decision_reason_codes),
-            policy_version=created.policy_version,
+            policy_version=self._normalize_policy_version(created.policy_version),
             policy_reference=created.policy_reference,
             resolution_action=created.resolution_action,
             refundable_amount_currency=created.refundable_amount_currency,
@@ -403,12 +407,12 @@ class RefundService:
         return RefundRequestResponse(
             refund_request_id=row.refund_request_id,
             order_id=row.order_id,
-            reason_code=row.reason_code,
+            reason_code=self._normalize_refund_reason_code(row.reason_code),
             status=row.status,
             status_reason=row.status_reason,
             manual_review_handoff=self._build_manual_review_handoff_from_row(row),
             decision_reason_codes=self._parse_decision_reason_codes(row.decision_reason_codes),
-            policy_version=row.policy_version,
+            policy_version=self._normalize_policy_version(row.policy_version),
             policy_reference=row.policy_reference,
             resolution_action=row.resolution_action,
             refundable_amount_currency=row.refundable_amount_currency,
@@ -461,6 +465,20 @@ class RefundService:
             normalized_codes.append(RefundDecisionReasonCode.REASON_CODE_NOT_SUPPORTED.value)
 
         return normalized_codes
+
+    @classmethod
+    def _normalize_refund_reason_code(cls, reason_code: str | None) -> str:
+        if reason_code and reason_code in cls._VALID_REFUND_REASON_CODES:
+            return reason_code
+        return RefundReasonCode.OTHER.value
+
+    @classmethod
+    def _normalize_policy_version(cls, policy_version: str | None) -> str | None:
+        if not policy_version:
+            return None
+        if policy_version in cls._VALID_POLICY_VERSIONS:
+            return policy_version
+        return None
 
     @staticmethod
     def _calculate_order_age_hours(order) -> float:
