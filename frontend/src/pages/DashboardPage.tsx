@@ -62,7 +62,7 @@ export function DashboardPage() {
           setAccountInfo({
             masked_email: accData.email_masked || 'Unknown account',
             demo_card_last4: accData.demo_card_last4,
-            balance_cents: accData.balance_cents ?? undefined,
+            balance_cents: accData.balance_cents,
           });
         }
       } catch (err) {

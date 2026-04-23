@@ -13,10 +13,7 @@ from app.schemas.refund import (
     RefundCreateRequest,
     RefundEligibilityCheckRequest,
     RefundEligibilityCheckResponse,
-    RefundReasonCode,
-    RefundRequestListResponse,
     RefundRequestResponse,
-    RefundRequestStatus,
 )
 from app.services.refund_service import RefundService
 
@@ -50,6 +47,14 @@ def create_refund_request(
     return result
 
 
+@router.get("/refunds/requests", response_model=list[RefundRequestResponse])
+def list_refund_requests(
+    current_user: User = Depends(get_current_user),
+    refund_service: RefundService = Depends(get_refund_service),
+) -> list[RefundRequestResponse]:
+    return refund_service.list_user_refund_requests(user=current_user)
+
+
 @router.get("/refunds/requests/{refund_request_id}", response_model=RefundRequestResponse)
 def get_refund_request(
     refund_request_id: str,
@@ -59,32 +64,14 @@ def get_refund_request(
     return refund_service.get_request(user=current_user, refund_request_id=refund_request_id)
 
 
-@router.get("/refunds/requests", response_model=RefundRequestListResponse)
-def list_user_refund_requests(
-    limit: int = Query(default=10, ge=1, le=50),
-    offset: int = Query(default=0, ge=0),
-    status: RefundRequestStatus | None = Query(default=None),
-    q: str | None = Query(default=None, max_length=100),
-    current_user: User = Depends(get_current_user),
-    refund_service: RefundService = Depends(get_refund_service),
-) -> RefundRequestListResponse:
-    return refund_service.list_user_requests(user=current_user, limit=limit, offset=offset, status=status, query=q)
-
-
 @router.get("/orders/{order_id}/state-sim", response_model=OrderStateSimResponse)
 def get_order_state_sim(
     order_id: str,
-    scenario_id: str | None = Query(default=None),
-    reason_code: RefundReasonCode | None = Query(default=None),
+    scenario_id: str = Query(default="default"),
     current_user: User = Depends(get_current_user),
     refund_service: RefundService = Depends(get_refund_service),
 ) -> OrderStateSimResponse:
-    return refund_service.get_order_state_sim(
-        user=current_user,
-        order_id=order_id,
-        scenario_id=scenario_id,
-        reason_code=reason_code,
-    )
+    return refund_service.get_order_state_sim(user=current_user, order_id=order_id, scenario_id=scenario_id)
 
 
 @router.get("/admin/refunds/manual-review/queue", response_model=ManualReviewQueueResponse)

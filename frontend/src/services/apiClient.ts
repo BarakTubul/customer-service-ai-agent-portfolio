@@ -452,8 +452,8 @@ class APIClient {
     offset?: number;
     status?: string;
     query?: string;
-  }): Promise<t.RefundRequestListResponse> {
-    const response = await this.client.get<t.RefundRequestListResponse>('/refunds/requests', {
+  }): Promise<t.RefundRequest[]> {
+    const response = await this.client.get<t.RefundRequest[]>('/refunds/requests', {
       params: {
         limit: params?.limit,
         offset: params?.offset,

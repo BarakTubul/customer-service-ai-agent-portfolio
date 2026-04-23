@@ -22,8 +22,8 @@ export function Header() {
       ]
     : [
         { label: 'My Orders', path: '/orders' },
+        { label: 'Refund History', path: '/refunds' },
         { label: 'Order', path: '/order' },
-        { label: 'Refunds', path: '/refunds' },
       ];
 
   useEffect(() => {
@@ -59,17 +59,6 @@ export function Header() {
         newNotifications.forEach((notification) => {
           seenNotificationIds.current.add(notification.notification_id);
         });
-
-        const orderNotifications = newNotifications.filter(
-          (notification) => notification.kind === 'order' && !!notification.order_id
-        );
-        if (orderNotifications.length > 0) {
-          window.dispatchEvent(
-            new CustomEvent('order-notifications-received', {
-              detail: orderNotifications,
-            })
-          );
-        }
 
         setNotifications((current) => [...newNotifications, ...current].slice(0, 6));
 
@@ -141,8 +130,19 @@ export function Header() {
                   onClick={() => setShowNotifications((current) => !current)}
                   variant="outline"
                   size="sm"
+                  className="gap-2"
                 >
-                  Notifications {notifications.length > 0 ? `(${notifications.length})` : ''}
+                  <img
+                    src="/images/icons/notification-bell.svg"
+                    alt="Notifications"
+                    className="h-4 w-4"
+                  />
+                  <span>Notifications</span>
+                  {notifications.length > 0 && (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-bold text-white">
+                      {notifications.length}
+                    </span>
+                  )}
                 </Button>
                 {showNotifications && (
                   <div className="absolute right-0 mt-2 w-80 rounded-xl border border-gray-200 bg-white shadow-lg p-3">

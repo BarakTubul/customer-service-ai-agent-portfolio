@@ -29,7 +29,7 @@ export function IndexPage() {
           <Button
             onClick={() => navigate('/guest')}
             variant="outline"
-            className="border-white text-white hover:bg-white/20 px-8 py-3 text-lg"
+            className="!border-white !bg-transparent !text-white hover:!bg-white/20 px-8 py-3 text-lg"
           >
             Try as Guest
           </Button>
