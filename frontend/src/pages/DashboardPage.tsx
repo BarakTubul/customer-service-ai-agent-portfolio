@@ -7,6 +7,9 @@ export function DashboardPage() {
   const { user, isGuest } = useAuth();
   const [accountInfo, setAccountInfo] = useState<{
     masked_email: string;
+    full_name?: string | null;
+    date_of_birth?: string | null;
+    address?: string | null;
     demo_card_last4?: string | null;
     balance_cents?: number;
   } | null>(null);
@@ -61,6 +64,9 @@ export function DashboardPage() {
           const accData = await apiClient.getAccountMe();
           setAccountInfo({
             masked_email: accData.email_masked || 'Unknown account',
+            full_name: accData.full_name,
+            date_of_birth: accData.date_of_birth,
+            address: accData.address,
             demo_card_last4: accData.demo_card_last4,
             balance_cents: accData.balance_cents,
           });
@@ -94,6 +100,19 @@ export function DashboardPage() {
           <p className="text-gray-700">
             <span className="font-semibold">Email:</span> {accountInfo?.masked_email}
           </p>
+          {!isGuest && (
+            <>
+              <p className="text-gray-700">
+                <span className="font-semibold">Name:</span> {accountInfo?.full_name || 'Not provided'}
+              </p>
+              <p className="text-gray-700">
+                <span className="font-semibold">Date of Birth:</span> {accountInfo?.date_of_birth || 'Not provided'}
+              </p>
+              <p className="text-gray-700">
+                <span className="font-semibold">Address:</span> {accountInfo?.address || 'Not provided'}
+              </p>
+            </>
+          )}
           <p className="text-gray-700">
             <span className="font-semibold">Status:</span>{' '}
             {isGuest ? (

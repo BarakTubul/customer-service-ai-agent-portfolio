@@ -50,6 +50,9 @@ class AccountOrderService:
         return AccountMeResponse(
             user_id=user.id,
             email_masked=self._mask_email(user.email),
+            full_name=user.full_name,
+            date_of_birth=user.date_of_birth,
+            address=user.address,
             account_status=status,
             is_admin=user.is_admin,
             demo_card_last4=self._card_last4(user.demo_card_number),

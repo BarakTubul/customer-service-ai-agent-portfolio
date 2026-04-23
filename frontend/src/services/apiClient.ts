@@ -153,10 +153,17 @@ class APIClient {
     return response.data;
   }
 
-  async register(email: string, password: string): Promise<t.AuthTokenResponse> {
+  async register(
+    email: string,
+    password: string,
+    profile: { fullName: string; dateOfBirth: string; address: string }
+  ): Promise<t.AuthTokenResponse> {
     const response = await this.client.post<t.AuthTokenResponse>('/auth/register', {
       email,
       password,
+      full_name: profile.fullName,
+      date_of_birth: profile.dateOfBirth,
+      address: profile.address,
     });
     this.setAccessToken(response.data.access_token);
     return response.data;

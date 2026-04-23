@@ -40,6 +40,9 @@ export interface LiveNotification {
 export interface AccountMeResponse {
   user_id: number;
   email_masked: string | null;
+  full_name?: string | null;
+  date_of_birth?: string | null;
+  address?: string | null;
   account_status: string;
   is_admin: boolean;
   demo_card_last4?: string | null;

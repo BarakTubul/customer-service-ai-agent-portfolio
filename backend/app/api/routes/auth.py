@@ -45,7 +45,13 @@ def register(
     response: Response,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> TokenResponse:
-    token = auth_service.register(email=str(payload.email), password=payload.password)
+    token = auth_service.register(
+        email=str(payload.email),
+        password=payload.password,
+        full_name=payload.full_name,
+        date_of_birth=payload.date_of_birth,
+        address=payload.address,
+    )
     _set_auth_cookie(response, token.access_token)
     return token
 
@@ -84,6 +90,9 @@ def convert_guest(
         guest_user=guest_user,
         email=str(payload.email),
         password=payload.password,
+        full_name=payload.full_name,
+        date_of_birth=payload.date_of_birth,
+        address=payload.address,
     )
     _set_auth_cookie(response, token.access_token)
     return token

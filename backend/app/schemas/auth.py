@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -20,6 +22,9 @@ class GuestResponse(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+    full_name: str = Field(min_length=2, max_length=255)
+    date_of_birth: date
+    address: str = Field(min_length=5, max_length=512)
 
 
 class LoginRequest(BaseModel):
@@ -30,3 +35,6 @@ class LoginRequest(BaseModel):
 class GuestConvertRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+    full_name: str | None = Field(default=None, min_length=2, max_length=255)
+    date_of_birth: date | None = None
+    address: str | None = Field(default=None, min_length=5, max_length=512)
