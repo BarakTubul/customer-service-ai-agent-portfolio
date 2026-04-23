@@ -32,6 +32,20 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function HomeRoute() {
+  const { isAuthenticated, user } = useAuth();
+
+  if (!isAuthenticated) {
+    return <IndexPage />;
+  }
+
+  if (user?.is_admin) {
+    return <Navigate to="/manager/refunds" replace />;
+  }
+
+  return <Navigate to="/order" replace />;
+}
+
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
 
@@ -40,7 +54,7 @@ function AppRoutes() {
       {isAuthenticated && <Header />}
       {isAuthenticated && <FloatingChatWidget />}
       <Routes>
-        <Route path="/" element={<IndexPage />} />
+        <Route path="/" element={<HomeRoute />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/guest" element={<GuestAccessPage />} />

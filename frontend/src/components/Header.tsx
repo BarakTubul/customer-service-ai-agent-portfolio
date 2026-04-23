@@ -99,7 +99,7 @@ export function Header() {
             className="text-2xl font-black tracking-tight cursor-pointer bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent"
             onClick={() => navigate('/order')}
           >
-            Support Flow
+            Foodie
           </h1>
           {user && (
             <nav className="hidden md:flex gap-2 rounded-full border border-cyan-100 bg-cyan-50/50 p-1">
