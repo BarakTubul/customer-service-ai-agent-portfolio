@@ -40,13 +40,10 @@ export interface LiveNotification {
 export interface AccountMeResponse {
   user_id: number;
   email_masked: string | null;
-  full_name?: string | null;
-  date_of_birth?: string | null;
-  address?: string | null;
   account_status: string;
   is_admin: boolean;
   demo_card_last4?: string | null;
-  balance_cents?: number;
+  balance_cents?: number | null;
 }
 
 export interface DemoCardRevealResponse {
@@ -174,21 +171,26 @@ export interface RefundEligibilityResponse {
   decision_reason_codes: string[];
 }
 
+export interface RefundRequestListResponse {
+  items: RefundRequest[];
+  total: number;
+  limit: number;
+  offset: number;
+  status_filter?: string | null;
+  query?: string | null;
+}
+
 export interface RefundRequest {
   refund_request_id: string;
   order_id: string;
-  reason_code: string;
   status: string;
   status_reason?: string;
-  manual_review_handoff?: ManualReviewHandoff | null;
-  decision_reason_codes: string[];
-  policy_version?: string | null;
-  policy_reference?: string | null;
+  reason_code: string;
+  decision_reason_codes?: string[];
   resolution_action?: string | null;
-  refundable_amount_currency?: string | null;
-  refundable_amount_value?: number | null;
-  explanation_template_key?: string | null;
-  explanation_params?: Record<string, string | number | boolean> | null;
+  policy_version?: string | null;
+  refundable_amount?: { currency: string; value: number } | null;
+  manual_review_handoff?: ManualReviewHandoff | null;
   idempotent_replay: boolean;
   created_at: string;
 }
@@ -198,11 +200,6 @@ export interface ManualReviewHandoff {
   queue_name: string;
   sla_deadline_at: string;
   payload: Record<string, string | number | boolean>;
-  claimed_by_admin_user_id?: number | null;
-  claimed_at?: string | null;
-  decided_by_admin_user_id?: number | null;
-  decided_at?: string | null;
-  reviewer_note?: string | null;
 }
 
 export interface ManualReviewQueueItem {
@@ -305,7 +302,6 @@ export interface CheckoutValidateResponse {
   subtotal_cents: number;
   delivery_fee_cents: number;
   total_cents: number;
-  available_balance_cents?: number | null;
   currency: string;
 }
 
@@ -332,10 +328,10 @@ export interface OrderCreateResponse {
   status: string;
   status_label: string;
   total_cents: number;
+  remaining_balance_cents: number;
   simulation_scenario_id?: string | null;
   currency: string;
   payment_authorization_id: string;
-  remaining_balance_cents?: number | null;
   idempotent_replay: boolean;
   created_at: string;
 }
