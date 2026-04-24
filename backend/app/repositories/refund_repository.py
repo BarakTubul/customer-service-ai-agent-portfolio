@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.refund_request import RefundRequest
@@ -24,6 +24,10 @@ class RefundRepository:
     def get_by_idempotency_key(self, idempotency_key: str) -> RefundRequest | None:
         stmt = select(RefundRequest).where(RefundRequest.idempotency_key == idempotency_key)
         return self.db.scalar(stmt)
+
+    def list_by_user_id(self, *, user_id: int) -> list[RefundRequest]:
+        stmt = select(RefundRequest).where(RefundRequest.user_id == user_id).order_by(RefundRequest.created_at.desc())
+        return list(self.db.scalars(stmt).all())
 
     def create(
         self,
@@ -98,69 +102,6 @@ class RefundRepository:
             stmt = stmt.where(RefundRequest.escalation_sla_deadline_at <= before_sla)
         stmt = stmt.order_by(RefundRequest.escalation_sla_deadline_at.asc(), RefundRequest.created_at.asc()).limit(
             bounded_limit
-        )
-        return list(self.db.scalars(stmt).all())
-
-    def list_by_user_id(
-        self,
-        user_id: int,
-        limit: int = 100,
-        offset: int = 0,
-        status: str | None = None,
-        query: str | None = None,
-    ) -> list[RefundRequest]:
-        """List refund requests for a specific user with optional filters and pagination."""
-        bounded_limit = max(1, min(limit, 50))
-        bounded_offset = max(0, offset)
-        stmt = self._build_user_refund_list_query(user_id=user_id, status=status, query=query)
-        stmt = (
-            stmt.order_by(RefundRequest.created_at.desc(), RefundRequest.id.desc())
-            .offset(bounded_offset)
-            .limit(bounded_limit)
-        )
-        return list(self.db.scalars(stmt).all())
-
-    def count_by_user_id(self, user_id: int, status: str | None = None, query: str | None = None) -> int:
-        stmt = self._build_user_refund_list_query(user_id=user_id, status=status, query=query)
-        count_stmt = select(func.count()).select_from(stmt.subquery())
-        return int(self.db.scalar(count_stmt) or 0)
-
-    def _build_user_refund_list_query(
-        self,
-        *,
-        user_id: int,
-        status: str | None = None,
-        query: str | None = None,
-    ):
-        stmt = select(RefundRequest).where(RefundRequest.user_id == user_id)
-
-        if status:
-            stmt = stmt.where(RefundRequest.status == status)
-
-        normalized_query = (query or "").strip().lower()
-        if normalized_query:
-            like_pattern = f"%{normalized_query}%"
-            stmt = stmt.where(
-                or_(
-                    func.lower(RefundRequest.refund_request_id).like(like_pattern),
-                    func.lower(RefundRequest.order_id).like(like_pattern),
-                    func.lower(RefundRequest.reason_code).like(like_pattern),
-                    func.lower(RefundRequest.status).like(like_pattern),
-                    func.lower(RefundRequest.status_reason).like(like_pattern),
-                    func.lower(RefundRequest.resolution_action).like(like_pattern),
-                )
-            )
-
-        return stmt
-
-    def list_by_order_id(self, order_id: str, limit: int = 100) -> list[RefundRequest]:
-        """List refund requests for an order, newest first."""
-        bounded_limit = max(1, min(limit, 500))
-        stmt = (
-            select(RefundRequest)
-            .where(RefundRequest.order_id == order_id)
-            .order_by(RefundRequest.created_at.desc())
-            .limit(bounded_limit)
         )
         return list(self.db.scalars(stmt).all())
 

@@ -9,6 +9,9 @@ export function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [address, setAddress] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -26,9 +29,28 @@ export function RegisterPage() {
       return;
     }
 
+    if (!fullName.trim()) {
+      setError('Full name is required');
+      return;
+    }
+
+    if (!dateOfBirth) {
+      setError('Date of birth is required');
+      return;
+    }
+
+    if (!address.trim()) {
+      setError('Address is required');
+      return;
+    }
+
     setLoading(true);
     try {
-      await register(email, password);
+      await register(email, password, {
+        fullName: fullName.trim(),
+        dateOfBirth,
+        address: address.trim(),
+      });
       navigate('/dashboard');
     } catch (err) {
       console.error('[auth] registration failed', {
@@ -53,6 +75,29 @@ export function RegisterPage() {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <Input
+            type="text"
+            label="Full Name"
+            placeholder="Jane Doe"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+          />
+          <Input
+            type="date"
+            label="Date of Birth"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            required
+          />
+          <Input
+            type="text"
+            label="Address"
+            placeholder="123 Main St, City"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
             required
           />
           <Input

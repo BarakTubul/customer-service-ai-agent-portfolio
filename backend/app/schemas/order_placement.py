@@ -75,6 +75,7 @@ class CheckoutValidateResponse(BaseModel):
     subtotal_cents: int
     delivery_fee_cents: int
     total_cents: int
+    available_balance_cents: int | None = None
     currency: str = "USD"
 
 
@@ -102,10 +103,10 @@ class OrderCreateResponse(BaseModel):
     status: str
     status_label: str
     total_cents: int
-    remaining_balance_cents: int
     simulation_scenario_id: str | None = None
     currency: str = "USD"
     payment_authorization_id: str
+    remaining_balance_cents: int | None = None
     idempotent_replay: bool = False
     created_at: datetime
 

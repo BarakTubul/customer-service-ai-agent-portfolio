@@ -8,7 +8,11 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isGuest: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    profile: { fullName: string; dateOfBirth: string; address: string }
+  ) => Promise<void>;
   guestAccess: (email: string) => Promise<void>;
   logout: () => void;
   sessionId: string;
@@ -165,9 +169,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (email: string, password: string) => {
+  const register = async (
+    email: string,
+    password: string,
+    profile: { fullName: string; dateOfBirth: string; address: string }
+  ) => {
     try {
-      await apiClient.register(email, password);
+      await apiClient.register(email, password, profile);
       const currentUser = await hydrateCurrentUser();
       setUser(currentUser);
     } catch (err) {

@@ -12,18 +12,18 @@ export function Button({
   ...props
 }: ButtonProps) {
   const baseClasses =
-    'inline-flex items-center justify-center font-semibold rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed';
+    'inline-flex items-center justify-center whitespace-nowrap rounded-lg font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-200 disabled:opacity-60 disabled:pointer-events-none';
 
   const variantClasses = {
-    primary: 'border border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
-    secondary: 'bg-green-600 text-white hover:bg-green-700',
-    outline: 'border-2 border-blue-600 text-blue-600 hover:bg-blue-50',
+    primary: 'border border-teal-700 bg-teal-700 text-white shadow-sm hover:-translate-y-0.5 hover:bg-teal-800 hover:shadow-md',
+    secondary: 'border border-orange-500 bg-orange-500 text-white shadow-sm hover:-translate-y-0.5 hover:bg-orange-600 hover:shadow-md',
+    outline: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400',
   };
 
   const sizeClasses = {
-    sm: 'px-3 py-1 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
+    sm: 'h-9 px-3 text-sm',
+    md: 'h-11 px-4 text-sm',
+    lg: 'h-12 px-6 text-base',
   };
 
   return (
@@ -42,14 +42,14 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 export function Input({ error, label, className = '', ...props }: InputProps) {
   return (
     <div className="w-full">
-      {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+      {label && <label className="mb-1.5 block text-sm font-semibold text-slate-700">{label}</label>}
       <input
-        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-          error ? 'border-red-500' : 'border-gray-300'
+        className={`h-11 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-200 ${
+          error ? 'border-red-500' : 'border-slate-300 focus:border-teal-700'
         } ${className}`}
         {...props}
       />
-      {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+      {error && <p className="mt-1.5 text-sm font-medium text-red-600">{error}</p>}
     </div>
   );
 }
@@ -61,7 +61,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 export function Card({ className = '', children, ...props }: CardProps) {
   return (
     <div
-      className={`bg-white rounded-lg shadow-md p-6 ${className}`}
+      className={`rounded-xl border border-slate-200 bg-white p-6 shadow-sm ${className}`}
       {...props}
     >
       {children}
@@ -77,24 +77,24 @@ interface AlertProps {
 
 export function Alert({ type, message, onClose }: AlertProps) {
   const bgClasses = {
-    success: 'bg-green-100',
-    error: 'bg-red-100',
-    info: 'bg-blue-100',
-    warning: 'bg-yellow-100',
+    success: 'bg-emerald-50 border-emerald-200',
+    error: 'bg-red-50 border-red-200',
+    info: 'bg-blue-50 border-blue-200',
+    warning: 'bg-amber-50 border-amber-200',
   };
 
   const textClasses = {
-    success: 'text-green-800',
+    success: 'text-emerald-800',
     error: 'text-red-800',
     info: 'text-blue-800',
-    warning: 'text-yellow-800',
+    warning: 'text-amber-800',
   };
 
   return (
-    <div className={`${bgClasses[type]} ${textClasses[type]} p-4 rounded-md flex justify-between items-center`}>
-      <span>{message}</span>
+    <div className={`${bgClasses[type]} ${textClasses[type]} flex items-start justify-between rounded-xl border p-4`}>
+      <span className="pr-3 text-sm font-medium">{message}</span>
       {onClose && (
-        <button onClick={onClose} className="text-lg font-bold">
+        <button onClick={onClose} className="rounded p-1 text-base font-bold leading-none hover:bg-black/5">
           ×
         </button>
       )}

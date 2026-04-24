@@ -39,9 +39,9 @@ class OrderPlacementService:
         "quality_issue",
     )
 
-    def __init__(self, order_repository: OrderRepository) -> None:
+    def __init__(self, order_repository: OrderRepository, user_repository: UserRepository) -> None:
         self.order_repository = order_repository
-        self.user_repository = UserRepository(order_repository.db)
+        self.user_repository = user_repository
         self.settings = get_settings()
 
     def list_catalog(
@@ -132,6 +132,8 @@ class OrderPlacementService:
     def validate_checkout(self, user: User, payload: CheckoutValidateRequest) -> CheckoutValidateResponse:
         issues: list[str] = []
         cart = self._build_cart_response(user.id)
+        delivery_fee = 300 if payload.delivery_option == "standard" else 650
+        total_cents = cart.subtotal_cents + delivery_fee
 
         if not cart.items:
             issues.append("Cart is empty")
@@ -148,23 +150,27 @@ class OrderPlacementService:
             payment_guard_issue = self._validate_payment_reference(user, payload.payment_method_reference)
             if payment_guard_issue:
                 issues.append(payment_guard_issue)
-
-        delivery_fee = 300 if payload.delivery_option == "standard" else 650
-        if not user.is_guest and (user.balance_cents or 0) < (cart.subtotal_cents + delivery_fee):
-            issues.append("Insufficient balance")
+            if (user.balance_cents or 0) < total_cents:
+                issues.append("Insufficient balance")
 
         return CheckoutValidateResponse(
             valid=len(issues) == 0,
             issues=issues,
             subtotal_cents=cart.subtotal_cents,
             delivery_fee_cents=delivery_fee,
-            total_cents=cart.subtotal_cents + delivery_fee,
+            total_cents=total_cents,
+            available_balance_cents=user.balance_cents if not user.is_guest else None,
         )
 
     def authorize_payment_sim(self, user: User, payload: PaymentAuthorizeSimRequest) -> PaymentAuthorizeSimResponse:
         payment_guard_issue = self._validate_payment_reference(user, payload.payment_method_reference)
         if payment_guard_issue:
             raise ValidationAppError(payment_guard_issue)
+        if (user.balance_cents or 0) < payload.amount_cents:
+            return PaymentAuthorizeSimResponse(
+                authorized=False,
+                reason="Insufficient balance",
+            )
 
         card_digits = self._normalize_card_digits(payload.payment_method_reference)
         if card_digits is None:
@@ -219,12 +225,15 @@ class OrderPlacementService:
         if not payment.authorized:
             raise ValidationAppError(payment.reason or "Payment authorization failed")
 
-        debit_ok, remaining_balance = self.user_repository.try_debit_balance(
+        debited, remaining_balance_cents = self.user_repository.try_debit_balance(
             user_id=user.id,
             amount_cents=checkout.total_cents,
         )
-        if not debit_ok:
-            raise ValidationAppError("Checkout validation failed", details={"issues": ["Insufficient balance"]})
+        if not debited:
+            raise ValidationAppError(
+                "Insufficient balance",
+                details={"available_balance_cents": remaining_balance_cents, "required_cents": checkout.total_cents},
+            )
 
         created_at = datetime.now(UTC)
         eta_from, eta_to = self._build_eta_window(created_at, payload.delivery_option)
@@ -235,6 +244,7 @@ class OrderPlacementService:
         order = self.order_repository.create(
             order_id=order_id,
             user_id=user.id,
+            payment_state="captured",
             ordered_items_summary=ordered_items_summary,
             total_cents=checkout.total_cents,
             eta_from=eta_from,
@@ -247,9 +257,9 @@ class OrderPlacementService:
             status=order.status,
             status_label=order.status_label,
             total_cents=checkout.total_cents,
-            remaining_balance_cents=remaining_balance,
             simulation_scenario_id=selected_scenario,
             payment_authorization_id=payment.authorization_id or "sim_auth_unknown",
+            remaining_balance_cents=remaining_balance_cents,
             created_at=order.created_at,
             idempotent_replay=False,
         )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -16,6 +17,9 @@ class SessionStateResponse(BaseModel):
 class AccountMeResponse(BaseModel):
     user_id: int
     email_masked: str | None
+    full_name: str | None = None
+    date_of_birth: date | None = None
+    address: str | None = None
     account_status: str
     is_admin: bool
     demo_card_last4: str | None = None
@@ -40,6 +44,7 @@ class OrderResponse(BaseModel):
     order_id: str
     status: str
     status_label: str
+    payment_state: str
     ordered_items_summary: str | None = None
     total_cents: int = 0
     created_at: datetime

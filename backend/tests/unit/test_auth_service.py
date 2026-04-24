@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -44,6 +45,9 @@ def test_convert_guest_to_registered_flips_is_guest() -> None:
             guest_user=guest_user,
             email="guest@example.com",
             password="strong-password",
+            full_name="Guest User",
+            date_of_birth=date(1995, 5, 1),
+            address="456 Guest Lane",
         )
 
         user = session.get(User, converted.user_id)
@@ -59,7 +63,13 @@ def test_register_assigns_demo_card() -> None:
     session = build_session()
     try:
         service = AuthService(UserRepository(session))
-        token = service.register(email="new-user@example.com", password="strong-password")
+        token = service.register(
+            email="new-user@example.com",
+            password="strong-password",
+            full_name="New User",
+            date_of_birth=date(1990, 1, 1),
+            address="123 Main St",
+        )
 
         user = session.get(User, token.user_id)
         assert user is not None
@@ -73,7 +83,13 @@ def test_login_backfills_demo_card_for_existing_registered_user() -> None:
     session = build_session()
     try:
         service = AuthService(UserRepository(session))
-        _ = service.register(email="legacy@example.com", password="strong-password")
+        _ = service.register(
+            email="legacy@example.com",
+            password="strong-password",
+            full_name="Legacy User",
+            date_of_birth=date(1991, 2, 2),
+            address="100 Legacy Rd",
+        )
 
         user = session.query(User).filter(User.email == "legacy@example.com").one()
         user.demo_card_number = None
@@ -93,7 +109,13 @@ def test_register_marks_admin_from_configured_email() -> None:
     session = build_session()
     try:
         service = AuthService(UserRepository(session))
-        token = service.register(email="admin@example.com", password="strong-password")
+        token = service.register(
+            email="admin@example.com",
+            password="strong-password",
+            full_name="Admin User",
+            date_of_birth=date(1988, 3, 3),
+            address="1 Admin Ave",
+        )
 
         user = session.get(User, token.user_id)
         assert user is not None

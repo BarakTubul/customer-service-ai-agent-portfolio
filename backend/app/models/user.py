@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -13,6 +14,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    address: Mapped[str | None] = mapped_column(String(512), nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     demo_card_number: Mapped[str | None] = mapped_column(String(19), nullable=True)
     demo_card_assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

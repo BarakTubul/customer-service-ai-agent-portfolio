@@ -9,7 +9,16 @@ from app.repositories.user_repository import UserRepository
 
 
 def _register_and_get_token(client: TestClient, email: str) -> str:
-    response = client.post("/api/v1/auth/register", json={"email": email, "password": "secure-pass-123"})
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "secure-pass-123",
+            "full_name": "Refund Test User",
+            "date_of_birth": "1990-01-01",
+            "address": "123 Refund Test Street",
+        },
+    )
     assert response.status_code == 201
     return response.json()["access_token"]
 
@@ -171,7 +180,7 @@ def test_refund_history_supports_pagination_and_filters(client: TestClient, db_s
     assert all("ord-history" in item["order_id"] for item in body_one["items"])
 
     filtered = client.get(
-        "/api/v1/refunds/requests?status=submitted&q=ord-history-1",
+        "/api/v1/refunds/requests?status=approved&q=ord-history-1",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert filtered.status_code == 200

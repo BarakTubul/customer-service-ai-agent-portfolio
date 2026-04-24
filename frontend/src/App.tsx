@@ -12,7 +12,6 @@ import { OrdersPage } from '@/pages/OrdersPage';
 import { OrderDetailPage } from '@/pages/OrderDetailPage';
 import { OrderTimelinePage } from '@/pages/OrderTimelinePage';
 import { OrderPlacementPage } from '@/pages/OrderPlacementPage';
-import { RefundPage } from '@/pages/RefundPage';
 import { RefundsTabPage } from '@/pages/RefundsTabPage';
 import { AdminRefundReviewPage } from '@/pages/AdminRefundReviewPage';
 import { AdminSupportInboxPage } from '@/pages/AdminSupportInboxPage';
@@ -33,6 +32,20 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function HomeRoute() {
+  const { isAuthenticated, user } = useAuth();
+
+  if (!isAuthenticated) {
+    return <IndexPage />;
+  }
+
+  if (user?.is_admin) {
+    return <Navigate to="/manager/refunds" replace />;
+  }
+
+  return <Navigate to="/order" replace />;
+}
+
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
 
@@ -41,7 +54,7 @@ function AppRoutes() {
       {isAuthenticated && <Header />}
       {isAuthenticated && <FloatingChatWidget />}
       <Routes>
-        <Route path="/" element={<IndexPage />} />
+        <Route path="/" element={<HomeRoute />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/guest" element={<GuestAccessPage />} />
@@ -86,20 +99,16 @@ function AppRoutes() {
           }
         />
         <Route
-          path="/refund"
-          element={
-            <ProtectedRoute>
-              <RefundPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/refunds"
           element={
             <ProtectedRoute>
               <RefundsTabPage />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="/refund"
+          element={<Navigate to="/refunds" replace />}
         />
         <Route
           path="/support"

@@ -10,7 +10,13 @@ from app.models.user import User
 def _register_and_get_token(client: TestClient, email: str) -> str:
     response = client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": "secure-pass-123"},
+        json={
+            "email": email,
+            "password": "secure-pass-123",
+            "full_name": "Test User",
+            "date_of_birth": "1990-01-01",
+            "address": "123 Test Street",
+        },
     )
     assert response.status_code == 201
     return response.json()["access_token"]

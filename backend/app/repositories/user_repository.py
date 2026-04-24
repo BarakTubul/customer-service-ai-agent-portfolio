@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import hashlib
 from datetime import UTC, datetime
 
@@ -27,9 +28,21 @@ class UserRepository:
         stmt = select(User).where(User.email == email)
         return self.db.scalar(stmt)
 
-    def create_registered(self, *, email: str, password_hash: str, is_admin: bool = False) -> User:
+    def create_registered(
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        is_admin: bool = False,
+        full_name: str | None = None,
+        date_of_birth: date | None = None,
+        address: str | None = None,
+    ) -> User:
         user = User(
             email=email,
+            full_name=full_name,
+            date_of_birth=date_of_birth,
+            address=address,
             password_hash=password_hash,
             is_guest=False,
             is_admin=is_admin,
